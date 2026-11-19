@@ -39,6 +39,7 @@ erDiagram
 - A stay records the student, room, opening operator and start time. Closed stays also record the departure type, reason, time and closing operator.
 - The database uses a nullable unique active-student reference to enforce one open stay per student. Vacancy is derived from room capacity less the count of open stays.
 - Absences reference the stay for the relevant building and room. The unique stay/date pair prevents duplicate entries. The operator and operational date are recorded.
+- Stay timestamps come from the application clock and are stored in UTC. Absence dates are calendar days in the residence's configured time zone, and an absence must fall on or after the local day of the check-in. `ResidenceTime` holds these rules, and tests replace its clock to check the hours when the local and UTC dates differ.
 - Referential integrity protects housing and absence history. A student or room linked to a stay cannot be physically deleted through the API.
 
 ## Check-in, transfers and checkout

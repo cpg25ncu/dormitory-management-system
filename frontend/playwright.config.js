@@ -12,7 +12,10 @@ export default defineConfig({
         trace: "retain-on-failure"
     },
     webServer: {
-        command: "java -jar ../target/dormitory-management-system-1.0.0.jar --spring.profiles.active=demo --server.port=18080",
+        // UTC+14 keeps the residence's date apart from the UTC date for most of the day,
+        // so the suite fails if any code falls back to UTC calendar days.
+        command: "java -jar ../target/dormitory-management-system-1.0.0.jar --spring.profiles.active=demo"
+            + " --server.port=18080 --dormitory.time-zone=Pacific/Kiritimati",
         url: baseURL + "/api/session",
         timeout: 60_000,
         stdout: "ignore",

@@ -1,9 +1,14 @@
-import {demoFixtures} from "./fixtures.js";
+import {demoFixtures, localDay} from "./fixtures.js";
 
 const storageKey = "dormitory-browser-demo-v1";
 const staff = {id: 2, role: "STAFF", username: "staff", displayName: "Morgan Reed", enabled: true};
 const admin = {id: 1, role: "ADMIN", username: "admin", displayName: "System Administrator"};
 const accounts = {admin, staff};
+const demoAccounts = [
+    {role: "ADMIN", username: "admin", password: "browser-demo"},
+    {role: "STAFF", username: "staff", password: "browser-demo"}
+];
+const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 function loadDemo() {
     try {
@@ -134,10 +139,9 @@ function housing(studentId, action, input, user) {
 function recordAbsence(input, user) {
     const stay = find(data.stays, input.stayId);
     const building = find(data.buildings, find(data.rooms, stay.roomId).buildingId);
-    requireCondition(input.absenceDate <= new Date().toISOString().slice(0, 10), 400,
-        "Absence dates must be today or earlier.");
+    requireCondition(input.absenceDate <= localDay(), 400, "Absence dates must be today or earlier.");
     requireCondition(!stay.checkOutAt && visibleBuilding(building, user)
-        && stay.checkInAt.slice(0, 10) <= input.absenceDate, 404, "Active room assignment for that date was not found.");
+        && localDay(stay.checkInAt) <= input.absenceDate, 404, "Active room assignment for that date was not found.");
     requireCondition(!data.absences.some(item => item.stayId === stay.id && item.absenceDate === input.absenceDate),
         409, "This resident already has an absence for that date.");
     data.absences.push({id: data.nextId++, stayId: stay.id, absenceDate: input.absenceDate,
@@ -192,7 +196,9 @@ export function request(url, {method, body}) {
     const route = url.pathname.split("/api/")[1];
     const user = data.activeUser ? accounts[data.activeUser] : null;
     try {
-        if (route === "session") return json({user, demo: true, csrfHeader: "X-CSRF-TOKEN", csrfToken: "demo"});
+        if (route === "session") {
+            return json({user, csrfHeader: "X-CSRF-TOKEN", csrfToken: "demo", timeZone, demo: true, demoAccounts});
+        }
         if (route === "login") {
             const username = body.get("username");
             requireCondition(username === "admin" || username === "staff", 401, "Choose a demo role.");

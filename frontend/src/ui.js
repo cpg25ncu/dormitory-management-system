@@ -104,12 +104,27 @@ export function field({ name, label, type = "text", value = "", options, require
     return element("div", {class: "form-field"}, element("label", {for: id}, label), control);
 }
 
-export function utcDate() { return new Date().toISOString().slice(0, 10); }
+// The residence's IANA time zone, supplied by the session. Calendar days and timestamps follow it.
+let residenceZone = "UTC";
 
-export function formatDate(iso) {
-    return new Intl.DateTimeFormat("en", {dateStyle: "medium", timeZone: "UTC"}).format(new Date(iso));
+export function useTimeZone(zone) { residenceZone = zone || "UTC"; }
+
+export function timeZone() { return residenceZone; }
+
+/** Today's date in the residence, as YYYY-MM-DD. */
+export function today() {
+    const parts = new Intl.DateTimeFormat("en", {timeZone: residenceZone, year: "numeric", month: "2-digit", day: "2-digit"})
+        .formatToParts(new Date());
+    const part = type => parts.find(item => item.type === type).value;
+    return part("year") + "-" + part("month") + "-" + part("day");
 }
 
+/** Formats a calendar date such as 2026-03-02. Dates have no time of day, so no zone conversion applies. */
+export function formatDate(isoDate) {
+    return new Intl.DateTimeFormat("en", {dateStyle: "medium", timeZone: "UTC"}).format(new Date(isoDate + "T00:00:00Z"));
+}
+
+/** Formats an instant in the residence's time zone. */
 export function formatTimestamp(iso) {
-    return new Intl.DateTimeFormat("en", {dateStyle: "medium", timeStyle: "short", timeZone: "UTC"}).format(new Date(iso));
+    return new Intl.DateTimeFormat("en", {dateStyle: "medium", timeStyle: "short", timeZone: residenceZone}).format(new Date(iso));
 }

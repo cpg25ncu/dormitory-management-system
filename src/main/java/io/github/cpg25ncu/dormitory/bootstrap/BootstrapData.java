@@ -1,8 +1,8 @@
 package io.github.cpg25ncu.dormitory.bootstrap;
 
 import io.github.cpg25ncu.dormitory.account.Accounts;
+import io.github.cpg25ncu.dormitory.common.ResidenceTime;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
@@ -13,20 +13,37 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Component
 public class BootstrapData implements ApplicationRunner {
+    private static final String DEMO_STAFF_USERNAME = "staff";
+    private static final String DEMO_STAFF_PASSWORD = "DemoStaff-Only-2026";
+
     private final JdbcClient jdbc;
     private final Accounts accounts;
+    private final ResidenceTime time;
     private final String username;
     private final String password;
     private final boolean demo;
 
-    BootstrapData(JdbcClient jdbc, Accounts accounts, @Value("${dormitory.bootstrap.username}") String username,
+    BootstrapData(JdbcClient jdbc, Accounts accounts, ResidenceTime time,
+                  @Value("${dormitory.bootstrap.username}") String username,
                   @Value("${dormitory.bootstrap.password}") String password,
                   @Value("${dormitory.bootstrap.demo}") boolean demo) {
         this.jdbc = jdbc;
         this.accounts = accounts;
+        this.time = time;
         this.username = username;
         this.password = password;
         this.demo = demo;
+    }
+
+    public boolean demo() {
+        return demo;
+    }
+
+    /** Sign-in options offered by the demo profile. Empty outside the demo. */
+    public List<DemoAccount> demoAccounts() {
+        if (!demo) return List.of();
+        return List.of(new DemoAccount("ADMIN", username, password),
+                new DemoAccount("STAFF", DEMO_STAFF_USERNAME, DEMO_STAFF_PASSWORD));
     }
 
     @Override
@@ -41,9 +58,9 @@ public class BootstrapData implements ApplicationRunner {
     }
 
     private void seedDemo() {
-        accounts.createStaff(new Accounts.NewStaff("staff", "Morgan Reed", "DemoStaff-Only-2026"));
+        accounts.createStaff(new Accounts.NewStaff(DEMO_STAFF_USERNAME, "Morgan Reed", DEMO_STAFF_PASSWORD));
         long adminId = accounts.loadUserByUsername(username).id();
-        long staffId = accounts.loadUserByUsername("staff").id();
+        long staffId = accounts.loadUserByUsername(DEMO_STAFF_USERNAME).id();
         jdbc.sql("INSERT INTO building (name, description, manager_id) VALUES (?, ?, ?)")
                 .params("Cedar Hall", "North campus residence", staffId).update();
         jdbc.sql("INSERT INTO building (name, description) VALUES (?, ?), (?, ?)")
@@ -66,7 +83,7 @@ public class BootstrapData implements ApplicationRunner {
                 new DemoStudent("Robin Davis", "Computer Science", "Willow Hall", "A01"),
                 new DemoStudent("Sasha Okafor", "Architecture", "Willow Hall", "A02"),
                 new DemoStudent("Taylor Nguyen", "Information Systems", "", ""));
-        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        LocalDate today = time.today();
         int index = 0;
         for (var student : students) {
             String number = "DEMO-%03d".formatted(++index);
@@ -78,7 +95,7 @@ public class BootstrapData implements ApplicationRunner {
                     SELECT s.id, r.id, s.id, :checkIn, :admin FROM student s CROSS JOIN room r
                     JOIN building b ON b.id = r.building_id
                     WHERE s.student_number = :number AND b.name = :building AND r.room_number = :room
-                    """).param("checkIn", today.minusDays(14).atStartOfDay()).param("admin", adminId)
+                    """).param("checkIn", time.startOf(today.minusDays(14))).param("admin", adminId)
                     .param("number", number).param("building", student.building()).param("room", student.room())
                     .update();
         }
@@ -103,4 +120,7 @@ public class BootstrapData implements ApplicationRunner {
                 JOIN student s ON s.id = st.student_id WHERE s.student_number = :number
                 """).param("date", date).param("reason", reason).param("user", user).param("number", number).update();
     }
+
+    /** A demo sign-in shown on the sign-in page. */
+    public record DemoAccount(String role, String username, String password) {}
 }

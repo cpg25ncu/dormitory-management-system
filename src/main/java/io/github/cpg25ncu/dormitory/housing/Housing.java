@@ -4,6 +4,7 @@ import static io.github.cpg25ncu.dormitory.common.ApiErrors.conflict;
 import static io.github.cpg25ncu.dormitory.common.ApiErrors.notFound;
 
 import io.github.cpg25ncu.dormitory.account.AccountPrincipal;
+import io.github.cpg25ncu.dormitory.common.ResidenceTime;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
@@ -20,10 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class Housing {
     private final JdbcClient jdbc;
     private final Rooms rooms;
+    private final ResidenceTime time;
 
-    Housing(JdbcClient jdbc, Rooms rooms) {
+    Housing(JdbcClient jdbc, Rooms rooms, ResidenceTime time) {
         this.jdbc = jdbc;
         this.rooms = rooms;
+        this.time = time;
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -31,7 +34,7 @@ public class Housing {
         lockStudent(studentId);
         if (currentStay(studentId).isPresent()) throw conflict("This student already has a room assignment.");
         ensureBedAvailable(roomId, rooms.lockCapacity(roomId));
-        openStay(studentId, roomId, operator);
+        openStay(studentId, roomId, operator, time.now());
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -44,8 +47,10 @@ public class Housing {
         int first = rooms.lockCapacity(Math.min(source, targetRoom));
         int second = rooms.lockCapacity(Math.max(source, targetRoom));
         ensureBedAvailable(targetRoom, targetRoom < source ? first : second);
-        closeStay(stay.id(), operator, "TRANSFER", "Room transfer");
-        openStay(studentId, targetRoom, operator);
+        // The old stay ends at the same instant the new one starts.
+        LocalDateTime now = time.now();
+        closeStay(stay.id(), operator, "TRANSFER", "Room transfer", now);
+        openStay(studentId, targetRoom, operator, now);
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -53,7 +58,7 @@ public class Housing {
         lockStudent(studentId);
         var stay = currentStay(studentId).orElseThrow(() -> conflict("This student is not checked in."));
         rooms.lockCapacity(stay.roomId());
-        closeStay(stay.id(), operator, "CHECKOUT", reason.strip());
+        closeStay(stay.id(), operator, "CHECKOUT", reason.strip(), time.now());
     }
 
     public List<Resident> residents(AccountPrincipal account) {
@@ -97,16 +102,18 @@ public class Housing {
         if (rooms.occupied(room) >= capacity) throw conflict("The selected room has no available beds.");
     }
 
-    private void openStay(long student, long room, long operator) {
-        jdbc.sql("INSERT INTO stay (student_id, room_id, active_student_id, check_in_by) VALUES (?, ?, ?, ?)")
-                .params(student, room, student, operator).update();
+    private void openStay(long student, long room, long operator, LocalDateTime at) {
+        jdbc.sql("""
+                INSERT INTO stay (student_id, room_id, active_student_id, check_in_at, check_in_by)
+                VALUES (?, ?, ?, ?, ?)
+                """).params(student, room, student, at, operator).update();
     }
 
-    private void closeStay(long stay, long operator, String type, String reason) {
+    private void closeStay(long stay, long operator, String type, String reason, LocalDateTime at) {
         jdbc.sql("""
-                UPDATE stay SET active_student_id = NULL, check_out_at = CURRENT_TIMESTAMP(6),
+                UPDATE stay SET active_student_id = NULL, check_out_at = ?,
                     check_out_by = ?, departure_type = ?, departure_reason = ? WHERE id = ?
-                """).params(operator, type, reason, stay).update();
+                """).params(at, operator, type, reason, stay).update();
     }
 
     record CurrentStay(long id, long roomId) {}

@@ -9,6 +9,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -33,8 +34,10 @@ public class WebSecurity {
         return http
                 .authenticationProvider(provider)
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/", "/index.html", "/styles.css", "/app.js", "/ui.js", "/views.js", "/transport.js",
-                                "/api/session", "/api/login", "/error").permitAll()
+                        // The single-page frontend is public. Data is only available through the API.
+                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/*.js", "/*.css", "/*.svg").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/health/*").permitAll()
+                        .requestMatchers("/api/session", "/api/login", "/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").hasAnyRole("ADMIN", "STAFF")
                         .anyRequest().denyAll())

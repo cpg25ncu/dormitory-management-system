@@ -11,6 +11,22 @@ servers:
 security:
   - sessionCookie: []
 paths:
+  /actuator/health:
+    get:
+      operationId: getHealth
+      summary: Report whether the application and its database are available
+      security: []
+      description: Liveness and readiness probes are available at /actuator/health/liveness and /actuator/health/readiness.
+      responses:
+        '200':
+          description: The application is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: UP }
+        '503': { description: The application or its database is unavailable }
   /api/session:
     get:
       operationId: getSession
@@ -496,7 +512,7 @@ components:
       description: Must fit within 72 UTF-8 bytes.
     Session:
       type: object
-      required: [user, csrfHeader, csrfToken, demo]
+      required: [user, csrfHeader, csrfToken, timeZone, demo, demoAccounts]
       properties:
         user:
           type: object
@@ -508,7 +524,21 @@ components:
             role: { type: string, enum: [ADMIN, STAFF] }
         csrfHeader: { type: string }
         csrfToken: { type: string }
+        timeZone:
+          type: string
+          example: Asia/Shanghai
+          description: IANA time zone of the residence. Calendar dates such as absence dates follow this zone.
         demo: { type: boolean }
+        demoAccounts:
+          type: array
+          description: Sign-in options offered by the demo profile. Always empty outside the demo.
+          items:
+            type: object
+            required: [role, username, password]
+            properties:
+              role: { type: string, enum: [ADMIN, STAFF] }
+              username: { type: string }
+              password: { type: string, format: password }
     PasswordChange:
       type: object
       required: [currentPassword, newPassword]
@@ -596,7 +626,7 @@ components:
       required: [stayId, absenceDate, reason]
       properties:
         stayId: { $ref: '#/components/schemas/Id' }
-        absenceDate: { type: string, format: date, description: UTC calendar date at or before today. }
+        absenceDate: { type: string, format: date, description: Calendar date in the residence's time zone, at or before today. }
         reason: { $ref: '#/components/schemas/Reason' }
     Departure:
       type: object
