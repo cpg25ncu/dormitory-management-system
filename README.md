@@ -4,13 +4,11 @@
 
 Dormitory Manager is a web application for university residence operations. It manages buildings, room capacity, student assignments and absence records through separate administrator and staff workspaces.
 
-## Interactive UI Demo (Simulated Backend)
+## Live Demo
 
 [Open the interactive browser demo](https://cpg25ncu-dormitory-demo.notablecake16.chatgpt.site)
 
-The online demo runs in your browser with fictional, tab-local records. The [full-stack deployment](#run-with-persistent-storage) enforces permissions in Spring Security and persists records in MySQL.
-
-Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out and choose **Use staff** to record an absence, then switch back to the administrator to transfer the student or check them out. **Reset demo** restores the starting records.
+Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out and choose **Use staff** to record an absence, then switch back to the administrator to transfer the student or check them out. The demo uses fictional records and stores changes in your browser tab. **Reset demo** restores the starting records.
 
 ![Administrator overview showing available beds, occupancy by building and recent absences](docs/media/overview.png)
 
