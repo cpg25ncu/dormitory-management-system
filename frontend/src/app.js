@@ -1,5 +1,6 @@
 import {element, field} from "./ui.js";
 import {views} from "./views.js";
+import {browserDemo, request} from "./transport.js";
 
 const byId = id => document.getElementById(id);
 const view = byId("view");
@@ -29,7 +30,7 @@ async function api(path, method = "GET", body) {
         headers.set("Content-Type", "application/json");
         payload = JSON.stringify(body);
     }
-    const response = await fetch(new URL("api" + path, base), {method, headers, body: payload});
+    const response = await request(new URL("api" + path, base), {method, headers, body: payload});
     const contentType = response.headers.get("Content-Type") || "";
     const result = contentType.includes("json") ? await response.json() : null;
     if (!response.ok) {
@@ -62,7 +63,10 @@ async function renderRoute() {
     if (!session?.user) return;
     const version = ++routeVersion;
     const isAdmin = session.user.role === "ADMIN";
-    const available = Object.entries(views).filter(([, entry]) => isAdmin ? !entry.staffOnly : !entry.adminOnly);
+    const available = Object.entries(views).filter(([name, entry]) => {
+        if (browserDemo && name === "staff") return false;
+        return isAdmin ? !entry.staffOnly : !entry.adminOnly;
+    });
     const wanted = location.hash.slice(1);
     const [key, entry] = available.find(([name]) => name === wanted) || available[0];
     byId("navigation").replaceChildren(...available.map(([name, item]) =>
@@ -108,7 +112,8 @@ function openForm({title, fields = [], submit = "Save", action, success, note, d
 function fillDemo(username, password) {
     loginForm.elements.username.value = username;
     loginForm.elements.password.value = password;
-    loginForm.querySelector("button[type=submit]").focus();
+    if (browserDemo) loginForm.requestSubmit();
+    else loginForm.querySelector("button[type=submit]").focus();
 }
 
 loginForm.addEventListener("submit", async event => {
@@ -189,6 +194,18 @@ byId("change-password").addEventListener("click", () => openForm({
 byId("demo-admin").addEventListener("click", () => fillDemo("admin", "DemoAdmin-Only-2026"));
 byId("demo-staff").addEventListener("click", () => fillDemo("staff", "DemoStaff-Only-2026"));
 window.addEventListener("hashchange", renderRoute);
+
+if (browserDemo) {
+    for (const control of loginForm.querySelectorAll("label, button[type=submit]")) control.hidden = true;
+    byId("auth-heading").textContent = "Try a workspace";
+    byId("demo-options").querySelector("p").textContent =
+        "Fictional data for this browser tab. Use the administrator role to manage housing or the staff role to record absences.";
+    const passwordButton = byId("change-password");
+    passwordButton.hidden = true;
+    const reset = element("button", {class: "button subtle", type: "button"}, "Reset demo");
+    reset.addEventListener("click", browserDemo.reset);
+    passwordButton.before(reset);
+}
 
 loadSession().catch(error => {
     byId("loading").textContent = "Could not connect to Dormitory Manager. " + error.message;

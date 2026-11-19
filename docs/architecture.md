@@ -1,16 +1,27 @@
 # Architecture
 
-The browser loads an HTML shell and JavaScript modules from the same origin as the API. Spring MVC handles request validation and JSON responses. Domain services own business rules and use Spring JDBC for parameterized database access. Flyway owns the schema.
+The source in [frontend/src](../frontend/src/) uses HTML, CSS and native JavaScript modules. Maven copies the frontend into the Spring Boot JAR as static assets. Spring Boot serves them on the same origin as the API, so the application can use session cookies and CSRF protection across both workspaces.
 
 ```mermaid
 flowchart LR
     Browser["Browser workspace"] --> Security["Spring Security"]
+    Security --> Assets["Static frontend in the JAR"]
     Security --> Controllers["Spring MVC controllers"]
     Controllers --> Services["Domain services"]
     Services --> Jdbc["Spring JDBC"]
     Jdbc --> DB[("MySQL")]
     Flyway["Flyway migrations"] --> DB
 ```
+
+Spring MVC validates input and returns JSON. Domain services own business rules and use Spring JDBC for parameterized database access. Flyway applies the SQL migrations.
+
+| Area | Responsibilities |
+| --- | --- |
+| `account`, `security` | Sessions, credentials, staff administration and role checks |
+| `directory` | Buildings, building managers and student records |
+| `housing` | Rooms, capacity, assignments and housing history |
+| `attendance` | Building-scoped absence records |
+| `bootstrap`, `common` | Initial administrator, demo fixtures and API error responses |
 
 ## Data model
 
@@ -47,3 +58,5 @@ The workflow tests exercise simultaneous check-ins for a single remaining bed an
 | `/api/admin/**` | Administrators only |
 
 Spring Security manages session cookies and CSRF protection. The browser retrieves the CSRF token from the session endpoint and supplies it with state-changing requests. Passwords use BCrypt. Disabling an account or changing its password increments its credential version, invalidating sessions issued under the old version. The API never returns password hashes.
+
+The [OpenAPI contract](openapi.yaml) specifies methods, paths, request bodies and response schemas. A client first reads `GET /api/session`, keeps its session cookie and sends the returned header and token with `POST /api/login`. After a successful login, it reads the session again before submitting writes. A successful password change ends the session.

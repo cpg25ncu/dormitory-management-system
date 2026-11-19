@@ -33,7 +33,7 @@ public class WebSecurity {
         return http
                 .authenticationProvider(provider)
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers("/", "/index.html", "/styles.css", "/app.js", "/ui.js", "/views.js",
+                        .requestMatchers("/", "/index.html", "/styles.css", "/app.js", "/ui.js", "/views.js", "/transport.js",
                                 "/api/session", "/api/login", "/error").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/**").hasAnyRole("ADMIN", "STAFF")

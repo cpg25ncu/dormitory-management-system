@@ -4,6 +4,7 @@
 .env.*
 docs
 src
+frontend
 target/*
 !target/dormitory-management-system-*.jar
 *.log

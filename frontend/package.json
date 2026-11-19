@@ -1,0 +1,12 @@
+{
+  "name": "dormitory-manager-browser-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "build:demo": "node demo/build.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
+  }
+}

@@ -1,0 +1,630 @@
+openapi: 3.0.3
+info:
+  title: Dormitory Management System API
+  version: 1.0.0
+  description: >
+    Same-origin API for residence operations. Administrators can see all buildings.
+    Staff can see only their assigned buildings, including the rooms, residents and
+    absence records for those buildings.
+servers:
+  - url: /
+security:
+  - sessionCookie: []
+paths:
+  /api/session:
+    get:
+      operationId: getSession
+      summary: Read the current identity and CSRF token
+      security: []
+      responses:
+        '200':
+          description: Session state. The user is null for a signed-out client.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+  /api/login:
+    post:
+      operationId: signIn
+      summary: Sign in with a username and password
+      description: Read the session again after signing in to obtain the current CSRF token.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string, format: password }
+      responses:
+        '204': { description: Signed in }
+        '401': { description: Credentials rejected }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/logout:
+    post:
+      operationId: signOut
+      summary: End the session
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      responses:
+        '204': { description: Session ended }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/password:
+    put:
+      operationId: changePassword
+      summary: Change the current user's password and end the session
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordChange' }
+      responses:
+        '204': { description: Password changed }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/buildings:
+    get:
+      operationId: listBuildings
+      summary: List visible buildings
+      responses:
+        '200':
+          description: Buildings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Building' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/rooms:
+    get:
+      operationId: listRooms
+      summary: List visible rooms with current occupancy
+      responses:
+        '200':
+          description: Rooms
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Room' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/residents:
+    get:
+      operationId: listResidents
+      summary: List visible students with an active stay
+      responses:
+        '200':
+          description: Residents
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Resident' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/absences:
+    get:
+      operationId: listAbsences
+      summary: List visible absence records
+      responses:
+        '200':
+          description: Absences, most recent first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Absence' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      operationId: recordAbsence
+      summary: Record an absence for an active stay in a visible building
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewAbsence' }
+      responses:
+        '201': { description: Absence recorded }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/buildings:
+    post:
+      operationId: createBuilding
+      summary: Create a building
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody: { $ref: '#/components/requestBodies/Building' }
+      responses:
+        '201': { description: Building created }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/buildings/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/Csrf'
+    put:
+      operationId: updateBuilding
+      summary: Update a building and assign or clear its staff account
+      requestBody: { $ref: '#/components/requestBodies/Building' }
+      responses:
+        '204': { description: Building updated }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteBuilding
+      summary: Delete a building with no linked rooms
+      responses:
+        '204': { description: Building deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/rooms:
+    post:
+      operationId: createRoom
+      summary: Create a room in an existing building
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/RoomInput'
+                - type: object
+                  required: [buildingId]
+                  properties:
+                    buildingId: { $ref: '#/components/schemas/Id' }
+      responses:
+        '201': { description: Room created }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/rooms/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/Csrf'
+    put:
+      operationId: updateRoom
+      summary: Update the room number and capacity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RoomInput' }
+      responses:
+        '204': { description: Room updated }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteRoom
+      summary: Delete a room with no housing history
+      responses:
+        '204': { description: Room deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/students:
+    get:
+      operationId: listStudents
+      summary: List student records and their current housing status
+      responses:
+        '200':
+          description: Students
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Student' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createStudent
+      summary: Create a student record
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody: { $ref: '#/components/requestBodies/Student' }
+      responses:
+        '201': { description: Student created }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/students/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+      - $ref: '#/components/parameters/Csrf'
+    put:
+      operationId: updateStudent
+      summary: Update a student's directory record
+      requestBody: { $ref: '#/components/requestBodies/Student' }
+      responses:
+        '204': { description: Student updated }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      operationId: deleteStudent
+      summary: Delete a student with no housing history
+      responses:
+        '204': { description: Student deleted }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/students/{id}/check-in:
+    post:
+      operationId: checkInStudent
+      summary: Assign an available bed to a student
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody: { $ref: '#/components/requestBodies/Assignment' }
+      responses:
+        '201': { description: Stay opened }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/students/{id}/transfer:
+    post:
+      operationId: transferStudent
+      summary: Move an active resident to another room with an available bed
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody: { $ref: '#/components/requestBodies/Assignment' }
+      responses:
+        '204': { description: Transfer completed }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/students/{id}/checkout:
+    post:
+      operationId: checkOutStudent
+      summary: Close an active stay and release the bed
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { $ref: '#/components/schemas/Reason' }
+      responses:
+        '204': { description: Stay closed }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/housing/history:
+    get:
+      operationId: listHousingHistory
+      summary: List closed stays, including transfers and checkouts
+      responses:
+        '200':
+          description: Closed stays
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Departure' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/admin/staff:
+    get:
+      operationId: listStaff
+      summary: List staff accounts
+      responses:
+        '200':
+          description: Staff accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Staff' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      operationId: createStaff
+      summary: Create a staff account
+      parameters:
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, displayName, password]
+              properties:
+                username: { type: string, pattern: '^[A-Za-z0-9._-]{3,40}$' }
+                displayName: { $ref: '#/components/schemas/Name' }
+                password: { $ref: '#/components/schemas/NewPassword' }
+      responses:
+        '201': { description: Staff account created }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/staff/{id}:
+    put:
+      operationId: updateStaff
+      summary: Update a staff member's display name and enabled status
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayName, enabled]
+              properties:
+                displayName: { $ref: '#/components/schemas/Name' }
+                enabled: { type: boolean }
+      responses:
+        '204': { description: Staff account updated }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/admin/staff/{id}/password:
+    put:
+      operationId: resetStaffPassword
+      summary: Replace a staff password and invalidate the account's sessions
+      parameters:
+        - $ref: '#/components/parameters/Id'
+        - $ref: '#/components/parameters/Csrf'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { $ref: '#/components/schemas/NewPassword' }
+      responses:
+        '204': { description: Password reset }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: JSESSIONID
+      description: Preserve this cookie across requests. All admin routes require the ADMIN role.
+  parameters:
+    Csrf:
+      name: X-CSRF-TOKEN
+      in: header
+      required: true
+      description: Use the csrfHeader name and csrfToken value from GET /api/session with its session cookie.
+      schema: { type: string }
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: '#/components/schemas/Id' }
+  requestBodies:
+    Building:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/BuildingInput' }
+    Student:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/StudentInput' }
+    Assignment:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [roomId]
+            properties:
+              roomId: { $ref: '#/components/schemas/Id' }
+  responses:
+    Invalid:
+      description: Invalid request data
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Unauthorized:
+      description: Sign-in required
+    Forbidden:
+      description: Role denied or CSRF token missing or invalid
+    NotFound:
+      description: The requested record was not found
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    Conflict:
+      description: The request conflicts with existing records or current housing state
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+  schemas:
+    Id: { type: integer, format: int64, minimum: 1 }
+    Name: { type: string, minLength: 1, maxLength: 80 }
+    Reason: { type: string, minLength: 1, maxLength: 240 }
+    NewPassword:
+      type: string
+      format: password
+      minLength: 12
+      maxLength: 72
+      description: Must fit within 72 UTF-8 bytes.
+    Session:
+      type: object
+      required: [user, csrfHeader, csrfToken, demo]
+      properties:
+        user:
+          type: object
+          nullable: true
+          required: [username, displayName, role]
+          properties:
+            username: { type: string }
+            displayName: { type: string }
+            role: { type: string, enum: [ADMIN, STAFF] }
+        csrfHeader: { type: string }
+        csrfToken: { type: string }
+        demo: { type: boolean }
+    PasswordChange:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, format: password, minLength: 1, maxLength: 72 }
+        newPassword: { $ref: '#/components/schemas/NewPassword' }
+    Building:
+      type: object
+      required: [id, name, description, managerId, managerName]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        name: { type: string }
+        description: { type: string }
+        managerId: { type: integer, format: int64, nullable: true }
+        managerName: { type: string, nullable: true }
+    BuildingInput:
+      type: object
+      required: [name]
+      properties:
+        name: { $ref: '#/components/schemas/Name' }
+        description: { type: string, maxLength: 240, nullable: true }
+        managerId: { type: integer, format: int64, minimum: 1, nullable: true }
+    Room:
+      type: object
+      required: [id, roomNumber, buildingId, buildingName, capacity, occupied]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        roomNumber: { type: string }
+        buildingId: { $ref: '#/components/schemas/Id' }
+        buildingName: { type: string }
+        capacity: { type: integer, minimum: 1, maximum: 30 }
+        occupied: { type: integer, minimum: 0 }
+    RoomInput:
+      type: object
+      required: [roomNumber, capacity]
+      properties:
+        roomNumber: { type: string, minLength: 1, maxLength: 30 }
+        capacity: { type: integer, minimum: 1, maximum: 30 }
+    Student:
+      type: object
+      required: [id, studentNumber, fullName, program, stayId, roomId, roomNumber, buildingName, status]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        studentNumber: { type: string }
+        fullName: { type: string }
+        program: { type: string }
+        stayId: { type: integer, format: int64, nullable: true }
+        roomId: { type: integer, format: int64, nullable: true }
+        roomNumber: { type: string, nullable: true }
+        buildingName: { type: string, nullable: true }
+        status: { type: string, enum: [RESIDENT, UNASSIGNED, CHECKED_OUT] }
+    StudentInput:
+      type: object
+      required: [studentNumber, fullName]
+      properties:
+        studentNumber: { type: string, minLength: 1, maxLength: 40 }
+        fullName: { $ref: '#/components/schemas/Name' }
+        program: { type: string, maxLength: 100, nullable: true }
+    Resident:
+      type: object
+      required: [stayId, studentId, studentNumber, fullName, roomId, roomNumber, buildingId, buildingName]
+      properties:
+        stayId: { $ref: '#/components/schemas/Id' }
+        studentId: { $ref: '#/components/schemas/Id' }
+        studentNumber: { type: string }
+        fullName: { type: string }
+        roomId: { $ref: '#/components/schemas/Id' }
+        roomNumber: { type: string }
+        buildingId: { $ref: '#/components/schemas/Id' }
+        buildingName: { type: string }
+    Absence:
+      type: object
+      required: [id, absenceDate, reason, studentNumber, fullName, roomNumber, buildingName, recordedBy]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        absenceDate: { type: string, format: date }
+        reason: { type: string }
+        studentNumber: { type: string }
+        fullName: { type: string }
+        roomNumber: { type: string }
+        buildingName: { type: string }
+        recordedBy: { type: string }
+    NewAbsence:
+      type: object
+      required: [stayId, absenceDate, reason]
+      properties:
+        stayId: { $ref: '#/components/schemas/Id' }
+        absenceDate: { type: string, format: date, description: UTC calendar date at or before today. }
+        reason: { $ref: '#/components/schemas/Reason' }
+    Departure:
+      type: object
+      required: [id, studentNumber, fullName, roomNumber, buildingName, checkInAt, checkOutAt, departureType, departureReason, processedBy]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        studentNumber: { type: string }
+        fullName: { type: string }
+        roomNumber: { type: string }
+        buildingName: { type: string }
+        checkInAt: { type: string, format: date-time }
+        checkOutAt: { type: string, format: date-time }
+        departureType: { type: string, enum: [TRANSFER, CHECKOUT] }
+        departureReason: { type: string }
+        processedBy: { type: string }
+    Staff:
+      type: object
+      required: [id, username, displayName, enabled]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        username: { type: string }
+        displayName: { type: string }
+        enabled: { type: boolean }
+    Problem:
+      type: object
+      properties:
+        type: { type: string, format: uri-reference }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string, format: uri-reference }
