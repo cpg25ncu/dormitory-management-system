@@ -1,3 +1,9 @@
+/** The browser's local calendar day for a date, as YYYY-MM-DD. The demo runs in the viewer's time zone. */
+export function localDay(value = new Date()) {
+    const date = new Date(value);
+    return date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+}
+
 export function demoFixtures() {
     const buildings = [
         {id: 1, name: "Cedar Hall", description: "North campus residence", managerId: 2},
@@ -26,9 +32,15 @@ export function demoFixtures() {
     const students = roster.map(([fullName, program], index) => ({
         id: index + 1, studentNumber: "DEMO-" + String(index + 1).padStart(3, "0"), fullName, program
     }));
-    const daysAgo = days => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+    const midnight = days => {
+        const date = new Date();
+        date.setHours(0, 0, 0, 0);
+        date.setDate(date.getDate() - days);
+        return date;
+    };
+    const daysAgo = days => localDay(midnight(days));
     const stays = roster.flatMap(([, , roomId], index) => roomId === null ? [] : [{
-        id: index + 1, studentId: index + 1, roomId, checkInAt: daysAgo(14) + "T00:00:00.000Z"
+        id: index + 1, studentId: index + 1, roomId, checkInAt: midnight(14).toISOString()
     }]);
     const absences = [
         {id: 1, stayId: 1, absenceDate: daysAgo(0), reason: "Approved overnight leave", recordedBy: "Morgan Reed"},

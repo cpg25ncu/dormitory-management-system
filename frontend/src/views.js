@@ -1,4 +1,4 @@
-import {actionGroup, button, element, formatDate, formatTimestamp, page, person, pill, table, utcDate} from "./ui.js";
+import {actionGroup, button, element, formatDate, formatTimestamp, page, person, pill, table, timeZone, today} from "./ui.js";
 
 const roomName = data => data.buildingName + " · " + data.roomNumber;
 const locationCell = row => person(row.roomNumber, row.buildingName);
@@ -54,7 +54,7 @@ async function overview(ctx) {
         table(absences.slice(0, 5), [
             ["Resident", row => person(row.fullName, row.studentNumber)],
             ["Building", row => row.buildingName],
-            ["Date (UTC)", row => formatDate(row.absenceDate)]
+            ["Date", row => formatDate(row.absenceDate)]
         ], {title: "Recent absences", compact: true, link: tableLink("View records", "absences"),
             empty: "No absences have been recorded."}));
     return page("Overview", "Current room availability and recent residence activity.", null, metrics, panels);
@@ -178,25 +178,25 @@ async function absenceView(ctx) {
             {name: "stayId", label: "Resident", options: [option(), ...residents.map(resident => [
                 resident.stayId, resident.fullName + " (" + resident.studentNumber + ") · " + roomName(resident)
             ])]},
-            {name: "absenceDate", label: "Absence date (UTC)", type: "date", value: utcDate(), max: utcDate()},
+            {name: "absenceDate", label: "Absence date", type: "date", value: today(), max: today()},
             {name: "reason", label: "Reason", type: "textarea", maxLength: 240}
         ], "/absences", "POST", data => ({...data, stayId: Number(data.stayId)}), "Absence recorded.");
     }
     return page("Absences", "Record resident absences and review the log for your buildings.", primary("Record absence", addAbsence),
         table(absences, [
             ["Resident", row => person(row.fullName, row.studentNumber)], ["Room", locationCell],
-            ["Date (UTC)", row => formatDate(row.absenceDate)], ["Reason", row => row.reason], ["Recorded by", row => row.recordedBy]
+            ["Date", row => formatDate(row.absenceDate)], ["Reason", row => row.reason], ["Recorded by", row => row.recordedBy]
         ], {title: "Absence records", search: row => [row.fullName, row.studentNumber, row.buildingName, row.absenceDate, row.reason]}));
 }
 
 async function historyView(ctx) {
     const history = await ctx.api("/admin/housing/history");
     const types = {TRANSFER: "Room transfer", CHECKOUT: "Check-out"};
-    return page("Housing history", "Review prior room assignments, transfers and check-outs.", null,
+    return page("Housing history", "Review prior room assignments, transfers and check-outs. Times are shown in " + timeZone() + ".", null,
         table(history, [
             ["Student", row => person(row.fullName, row.studentNumber)], ["Previous room", locationCell],
-            ["Checked in (UTC)", row => formatTimestamp(row.checkInAt)],
-            ["Closed (UTC)", row => formatTimestamp(row.checkOutAt)], ["Type", row => pill(types[row.departureType])],
+            ["Checked in", row => formatTimestamp(row.checkInAt)],
+            ["Closed", row => formatTimestamp(row.checkOutAt)], ["Type", row => pill(types[row.departureType])],
             ["Reason", row => row.departureReason], ["Processed by", row => row.processedBy]
         ], {
             title: "Housing history", search: row => [row.fullName, row.studentNumber, row.buildingName, row.departureReason],

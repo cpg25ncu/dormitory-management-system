@@ -23,6 +23,15 @@ async function read(page, path) {
     return response.json();
 }
 
+/** Today's date where the residence is, which can differ from the UTC date and the browser's date. */
+async function residenceToday(page) {
+    const {timeZone} = await read(page, "/session");
+    const parts = new Intl.DateTimeFormat("en", {timeZone, year: "numeric", month: "2-digit", day: "2-digit"})
+        .formatToParts(new Date());
+    const part = type => parts.find(item => item.type === type).value;
+    return part("year") + "-" + part("month") + "-" + part("day");
+}
+
 async function post(page, path, data, status = 201) {
     const {csrfHeader, csrfToken} = await read(page, "/session");
     const response = await page.request.post("/api" + path, {data, headers: {[csrfHeader]: csrfToken}});
@@ -112,6 +121,7 @@ test("administrator and building staff complete a residence workflow", async ({p
 
     await navigate(page, "Absences");
     await page.getByRole("button", {name: "Record absence"}).click();
+    await expect(page.getByLabel("Absence date")).toHaveValue(await residenceToday(page));
     await page.getByLabel("Resident", {exact: true}).selectOption({
         label: studentName + " (" + studentNumber + ") · Cedar Hall · 101"
     });
@@ -190,7 +200,7 @@ test("staff can neither see nor record an absence for another building", async (
     await expect(page.getByLabel("Resident", {exact: true}).locator('option[value="' + outside.stayId + '"]')).toHaveCount(0);
 
     await post(page, "/absences", {
-        stayId: outside.stayId, absenceDate: new Date().toISOString().slice(0, 10), reason
+        stayId: outside.stayId, absenceDate: await residenceToday(page), reason
     }, 404);
     await page.getByRole("dialog").getByRole("button", {name: "Cancel"}).click();
     await page.getByRole("button", {name: "Sign out"}).click();

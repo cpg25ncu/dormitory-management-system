@@ -4,43 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import java.time.LocalDate;
-import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
-import org.springframework.mock.web.MockHttpSession;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
 
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("demo")
-class ResidenceWorkflowsTest {
-    @Autowired MockMvc mvc;
-    @Autowired ObjectMapper json;
-
-    @DynamicPropertySource
-    static void mysqlWhenConfigured(DynamicPropertyRegistry registry) {
-        String url = System.getenv("DORM_TEST_DB_URL");
-        if (url == null || url.isBlank()) return;
-        registry.add("spring.datasource.url", () -> url);
-        registry.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
-        registry.add("spring.datasource.username", () -> System.getenv("DORM_TEST_DB_USERNAME"));
-        registry.add("spring.datasource.password", () -> System.getenv("DORM_TEST_DB_PASSWORD"));
-    }
-
+class ResidenceWorkflowsTest extends ApiIntegrationTest {
     @Test
     void unauthenticatedAndUnprotectedWritesAreRejected() throws Exception {
         mvc.perform(get("/api/admin/students")).andExpect(status().isUnauthorized());
@@ -55,7 +27,7 @@ class ResidenceWorkflowsTest {
     @Test
     void staffCanOnlySeeAndRecordAbsencesForAssignedBuildings() throws Exception {
         var admin = admin();
-        var staff = login("staff", "DemoStaff-Only-2026");
+        var staff = staff();
         mvc.perform(get("/api/admin/students").session(staff.session())).andExpect(status().isForbidden());
         mvc.perform(get("/api/buildings").session(staff.session()))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
@@ -63,9 +35,9 @@ class ResidenceWorkflowsTest {
         assertThat(getJson("/api/rooms", staff).size()).isEqualTo(3);
         assertThat(getJson("/api/absences", staff).toString()).doesNotContain("Maple Hall");
 
-        long assignedStay = find(getJson("/api/residents", staff), "studentNumber", "DEMO-002").get("stayId").asLong();
-        long otherStay = find(getJson("/api/residents", admin), "studentNumber", "DEMO-006").get("stayId").asLong();
-        String today = LocalDate.now(ZoneOffset.UTC).toString();
+        long assignedStay = activeStay(staff, "DEMO-002");
+        long otherStay = activeStay(admin, "DEMO-006");
+        String today = today().toString();
         write(post("/api/absences"), staff, Map.of("stayId", otherStay, "absenceDate", today, "reason", "No access"), 404);
         write(post("/api/absences"), staff, Map.of("stayId", assignedStay, "absenceDate", today, "reason", "Approved leave"), 201);
         write(post("/api/absences"), staff, Map.of("stayId", assignedStay, "absenceDate", today, "reason", "Duplicate entry"), 409);
@@ -82,9 +54,8 @@ class ResidenceWorkflowsTest {
         long other = student(admin, "TRANSFER-2");
 
         write(post(studentOperation(student, "check-in")), admin, Map.of("roomId", originalRoom), 201);
-        long activeStay = find(getJson("/api/residents", admin), "studentNumber", "TRANSFER-1").get("stayId").asLong();
-        write(post("/api/absences"), admin, Map.of("stayId", activeStay, "reason", "First-day absence",
-                "absenceDate", LocalDate.now(ZoneOffset.UTC).toString()), 201);
+        write(post("/api/absences"), admin, Map.of("stayId", activeStay(admin, "TRANSFER-1"), "reason", "First-day absence",
+                "absenceDate", today().toString()), 201);
         write(post(studentOperation(student, "check-in")), admin, Map.of("roomId", destination), 409);
         write(post(studentOperation(other, "check-in")), admin, Map.of("roomId", destination), 201);
         write(post(studentOperation(student, "transfer")), admin, Map.of("roomId", destination), 409);
@@ -144,75 +115,4 @@ class ResidenceWorkflowsTest {
         write(put("/api/admin/staff/" + id), admin, Map.of("displayName", "Session Test", "enabled", false), 204);
         mvc.perform(get("/api/rooms").session(afterReset.session())).andExpect(status().isUnauthorized());
     }
-
-    private Login admin() throws Exception {
-        return login("admin", "DemoAdmin-Only-2026");
-    }
-
-    private Login login(String username, String password) throws Exception {
-        var initial = mvc.perform(get("/api/session")).andExpect(status().isOk()).andReturn();
-        var session = (MockHttpSession) initial.getRequest().getSession(false);
-        var csrf = json.readTree(initial.getResponse().getContentAsString());
-        var signedIn = mvc.perform(post("/api/login").session(session)
-                        .header(csrf.get("csrfHeader").asString(), csrf.get("csrfToken").asString())
-                        .param("username", username).param("password", password))
-                .andExpect(status().isNoContent()).andReturn();
-        var signedInSession = (MockHttpSession) signedIn.getRequest().getSession(false);
-        var state = mvc.perform(get("/api/session").session(signedInSession)).andReturn();
-        var payload = json.readTree(state.getResponse().getContentAsString());
-        assertThat(payload.get("user").get("username").asString()).isEqualTo(username);
-        return new Login(signedInSession, payload.get("csrfHeader").asString(), payload.get("csrfToken").asString());
-    }
-
-    private long building(Login admin, String name) throws Exception {
-        write(post("/api/admin/buildings"), admin, Map.of("name", name), 201);
-        return find(getJson("/api/buildings", admin), "name", name).get("id").asLong();
-    }
-
-    private long room(Login admin, long building, String number, int capacity) throws Exception {
-        write(post("/api/admin/rooms"), admin, Map.of("buildingId", building, "roomNumber", number, "capacity", capacity), 201);
-        return find(getJson("/api/rooms", admin), "roomNumber", number).get("id").asLong();
-    }
-
-    private long student(Login admin, String number) throws Exception {
-        write(post("/api/admin/students"), admin, studentInput(number), 201);
-        return find(getJson("/api/admin/students", admin), "studentNumber", number).get("id").asLong();
-    }
-
-    private int occupied(Login admin, long room) throws Exception {
-        return find(getJson("/api/rooms", admin), "id", Long.toString(room)).get("occupied").asInt();
-    }
-
-    private JsonNode getJson(String path, Login login) throws Exception {
-        String body = mvc.perform(get(path).session(login.session())).andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        return json.readTree(body);
-    }
-
-    private static JsonNode find(JsonNode rows, String key, String value) {
-        for (JsonNode row : rows) {
-            if (value.equals(row.get(key).asString())) return row;
-        }
-        throw new AssertionError("Fixture not found: " + key + " = " + value);
-    }
-
-    private static String studentOperation(long student, String operation) {
-        return "/api/admin/students/" + student + "/" + operation;
-    }
-
-    private static Map<String, String> studentInput(String number) {
-        return Map.of("studentNumber", number, "fullName", "Test Resident " + number, "program", "Testing");
-    }
-
-    private void write(MockHttpServletRequestBuilder request, Login login, Object body, int expected) throws Exception {
-        assertThat(perform(request, login, body)).isEqualTo(expected);
-    }
-
-    private int perform(MockHttpServletRequestBuilder request, Login login, Object body) throws Exception {
-        request.session(login.session()).header(login.header(), login.token());
-        if (body != null) request.contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body));
-        return mvc.perform(request).andReturn().getResponse().getStatus();
-    }
-
-    private record Login(MockHttpSession session, String header, String token) {}
 }

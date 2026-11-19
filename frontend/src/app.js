@@ -1,4 +1,4 @@
-import {element, field} from "./ui.js";
+import {element, field, useTimeZone} from "./ui.js";
 import {views} from "./views.js";
 import {browserDemo, request} from "./transport.js";
 
@@ -47,6 +47,7 @@ async function api(path, method = "GET", body) {
 
 async function loadSession() {
     session = await api("/session");
+    useTimeZone(session.timeZone);
     byId("loading").hidden = true;
     byId("demo-options").hidden = !session.demo;
     signIn.hidden = Boolean(session.user);
@@ -109,9 +110,11 @@ function openForm({title, fields = [], submit = "Save", action, success, note, d
     dialog.showModal();
 }
 
-function fillDemo(username, password) {
-    loginForm.elements.username.value = username;
-    loginForm.elements.password.value = password;
+function fillDemo(role) {
+    const account = session.demoAccounts.find(item => item.role === role);
+    if (!account) return;
+    loginForm.elements.username.value = account.username;
+    loginForm.elements.password.value = account.password;
     if (browserDemo) loginForm.requestSubmit();
     else loginForm.querySelector("button[type=submit]").focus();
 }
@@ -191,8 +194,8 @@ byId("change-password").addEventListener("click", () => openForm({
     success: "Password changed. Sign in with your new password.",
     onDone: loadSession
 }));
-byId("demo-admin").addEventListener("click", () => fillDemo("admin", "DemoAdmin-Only-2026"));
-byId("demo-staff").addEventListener("click", () => fillDemo("staff", "DemoStaff-Only-2026"));
+byId("demo-admin").addEventListener("click", () => fillDemo("ADMIN"));
+byId("demo-staff").addEventListener("click", () => fillDemo("STAFF"));
 window.addEventListener("hashchange", renderRoute);
 
 if (browserDemo) {
