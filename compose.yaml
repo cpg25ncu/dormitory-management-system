@@ -1,0 +1,34 @@
+services:
+  app:
+    build: .
+    environment:
+      DORM_DB_URL: "jdbc:mysql://db:3306/dormitory?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true&allowPublicKeyRetrieval=true&sslMode=DISABLED"
+      DORM_DB_USERNAME: dormitory
+      DORM_DB_PASSWORD: ${DORM_DB_PASSWORD:?Set DORM_DB_PASSWORD in .env}
+      DORM_ADMIN_USERNAME: ${DORM_ADMIN_USERNAME:-admin}
+      DORM_ADMIN_PASSWORD: ${DORM_ADMIN_PASSWORD:-}
+      DORM_SECURE_COOKIE: ${DORM_SECURE_COOKIE:-false}
+    ports:
+      - "127.0.0.1:${DORM_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: dormitory
+      MYSQL_USER: dormitory
+      MYSQL_PASSWORD: ${DORM_DB_PASSWORD:?Set DORM_DB_PASSWORD in .env}
+      MYSQL_RANDOM_ROOT_PASSWORD: "yes"
+    volumes:
+      - dormitory_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_PASSWORD\" mysql -h 127.0.0.1 -u \"$$MYSQL_USER\" \"$$MYSQL_DATABASE\" -e 'SELECT 1' >/dev/null"]
+      interval: 5s
+      timeout: 4s
+      retries: 24
+      start_period: 20s
+    restart: unless-stopped
+volumes:
+  dormitory_data:
