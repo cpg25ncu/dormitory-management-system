@@ -1,10 +1,8 @@
-.git
-.github
-.env
-.env.*
-docs
-src
-frontend
-target/*
-!target/dormitory-management-system-*.jar
-*.log
+# The image is built from source. Send only what the build stage copies.
+*
+!.mvn/
+!mvnw
+!pom.xml
+!LICENSE
+!src/main/
+!frontend/src/
