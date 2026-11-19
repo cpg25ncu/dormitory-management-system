@@ -4,24 +4,30 @@ import static io.github.cpg25ncu.dormitory.common.ApiErrors.invalid;
 import static io.github.cpg25ncu.dormitory.common.ApiErrors.notFound;
 
 import io.github.cpg25ncu.dormitory.account.AccountPrincipal;
+import io.github.cpg25ncu.dormitory.housing.AllocationRules;
+import io.github.cpg25ncu.dormitory.housing.GenderPolicy;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class BuildingDirectory {
     private final JdbcClient jdbc;
+    private final AllocationRules rules;
 
-    BuildingDirectory(JdbcClient jdbc) {
+    BuildingDirectory(JdbcClient jdbc, AllocationRules rules) {
         this.jdbc = jdbc;
+        this.rules = rules;
     }
 
     public List<Building> list(AccountPrincipal account) {
         return jdbc.sql("""
-                SELECT b.id, b.name, b.description, b.manager_id, u.display_name AS manager_name
+                SELECT b.id, b.name, b.description, b.gender_policy, b.manager_id, u.display_name AS manager_name
                 FROM building b LEFT JOIN app_user u ON u.id = b.manager_id
                 WHERE (:admin = TRUE OR b.manager_id = :account)
                 ORDER BY b.name, b.id
@@ -30,19 +36,24 @@ public class BuildingDirectory {
 
     public void create(BuildingInput input) {
         verifyManager(input.managerId(), null);
-        jdbc.sql("INSERT INTO building (name, description, manager_id) VALUES (:name, :description, :manager)")
-                .param("name", input.name().strip()).param("description", description(input))
+        jdbc.sql("""
+                INSERT INTO building (name, description, gender_policy, manager_id)
+                VALUES (:name, :description, :policy, :manager)
+                """).param("name", input.name().strip()).param("description", description(input))
+                .param("policy", policy(input).name())
                 .param("manager", input.managerId(), java.sql.Types.BIGINT).update();
     }
 
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public void update(long id, BuildingInput input) {
+        rules.ensureCanChangePolicy(id, policy(input));
         verifyManager(input.managerId(), id);
-        int changed = jdbc.sql("""
-                UPDATE building SET name = :name, description = :description, manager_id = :manager
+        jdbc.sql("""
+                UPDATE building SET name = :name, description = :description, gender_policy = :policy, manager_id = :manager
                 WHERE id = :id
                 """).param("name", input.name().strip()).param("description", description(input))
+                .param("policy", policy(input).name())
                 .param("manager", input.managerId(), java.sql.Types.BIGINT).param("id", id).update();
-        if (changed == 0) throw notFound("Building");
     }
 
     public void delete(long id) {
@@ -62,11 +73,18 @@ public class BuildingDirectory {
         }
     }
 
-    private String description(BuildingInput input) {
+    private static String description(BuildingInput input) {
         return input.description() == null ? "" : input.description().strip();
     }
 
-    public record Building(long id, String name, String description, Long managerId, String managerName) {}
+    private static GenderPolicy policy(BuildingInput input) {
+        return input.genderPolicy() == null ? GenderPolicy.MIXED : input.genderPolicy();
+    }
+
+    public record Building(long id, String name, String description, GenderPolicy genderPolicy, Long managerId,
+                           String managerName) {}
+    /** A building. A missing gender policy means {@code MIXED}. */
     public record BuildingInput(@NotBlank @Size(max = 80) String name,
-                                @Size(max = 240) String description, @Positive Long managerId) {}
+                                @Size(max = 240) String description, GenderPolicy genderPolicy,
+                                @Positive Long managerId) {}
 }

@@ -17,6 +17,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -99,7 +100,11 @@ abstract class ApiIntegrationTest {
     }
 
     long building(Login admin, String name) throws Exception {
-        write(post("/api/admin/buildings"), admin, Map.of("name", name), 201);
+        return building(admin, name, "MIXED");
+    }
+
+    long building(Login admin, String name, String genderPolicy) throws Exception {
+        write(post("/api/admin/buildings"), admin, Map.of("name", name, "genderPolicy", genderPolicy), 201);
         return find(getJson("/api/buildings", admin), "name", name).get("id").asLong();
     }
 
@@ -114,7 +119,11 @@ abstract class ApiIntegrationTest {
     }
 
     long student(Login admin, String number) throws Exception {
-        write(post("/api/admin/students"), admin, studentInput(number), 201);
+        return student(admin, number, "FEMALE");
+    }
+
+    long student(Login admin, String number, String gender) throws Exception {
+        write(post("/api/admin/students"), admin, studentInput(number, gender), 201);
         return find(getJson("/api/admin/students", admin), "studentNumber", number).get("id").asLong();
     }
 
@@ -144,7 +153,11 @@ abstract class ApiIntegrationTest {
     }
 
     static Map<String, String> studentInput(String number) {
-        return Map.of("studentNumber", number, "fullName", "Test Resident " + number, "program", "Testing");
+        return studentInput(number, "FEMALE");
+    }
+
+    static Map<String, String> studentInput(String number, String gender) {
+        return Map.of("studentNumber", number, "fullName", "Test Resident " + number, "gender", gender, "program", "Testing");
     }
 
     void write(MockHttpServletRequestBuilder request, Login login, Object body, int expected) throws Exception {
@@ -152,9 +165,20 @@ abstract class ApiIntegrationTest {
     }
 
     int perform(MockHttpServletRequestBuilder request, Login login, Object body) throws Exception {
+        return send(request, login, body).getStatus();
+    }
+
+    /** Sends a write that should fail and returns the problem detail message. */
+    String rejected(MockHttpServletRequestBuilder request, Login login, Object body, int expected) throws Exception {
+        var response = send(request, login, body);
+        assertThat(response.getStatus()).isEqualTo(expected);
+        return json.readTree(response.getContentAsString()).get("detail").asString();
+    }
+
+    private MockHttpServletResponse send(MockHttpServletRequestBuilder request, Login login, Object body) throws Exception {
         request.session(login.session()).header(login.header(), login.token());
         if (body != null) request.contentType(MediaType.APPLICATION_JSON).content(json.writeValueAsString(body));
-        return mvc.perform(request).andReturn().getResponse().getStatus();
+        return mvc.perform(request).andReturn().getResponse();
     }
 
     record Login(MockHttpSession session, String header, String token) {}

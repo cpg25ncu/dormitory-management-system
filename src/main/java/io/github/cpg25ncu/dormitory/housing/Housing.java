@@ -1,7 +1,6 @@
 package io.github.cpg25ncu.dormitory.housing;
 
 import static io.github.cpg25ncu.dormitory.common.ApiErrors.conflict;
-import static io.github.cpg25ncu.dormitory.common.ApiErrors.notFound;
 
 import io.github.cpg25ncu.dormitory.account.AccountPrincipal;
 import io.github.cpg25ncu.dormitory.common.ResidenceTime;
@@ -21,25 +20,29 @@ import org.springframework.transaction.annotation.Transactional;
 public class Housing {
     private final JdbcClient jdbc;
     private final Rooms rooms;
+    private final AllocationRules rules;
     private final ResidenceTime time;
 
-    Housing(JdbcClient jdbc, Rooms rooms, ResidenceTime time) {
+    Housing(JdbcClient jdbc, Rooms rooms, AllocationRules rules, ResidenceTime time) {
         this.jdbc = jdbc;
         this.rooms = rooms;
+        this.rules = rules;
         this.time = time;
     }
 
+    // Lock order for every housing write: student, rooms by ascending ID, then building. See AllocationRules.
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void checkIn(long studentId, long roomId, long operator) {
-        lockStudent(studentId);
+        Gender gender = rules.lockStudent(studentId);
         if (currentStay(studentId).isPresent()) throw conflict("This student already has a room assignment.");
         ensureBedAvailable(roomId, rooms.lockCapacity(roomId));
+        rules.ensureCanAssign(studentId, gender, roomId);
         openStay(studentId, roomId, operator, time.now());
     }
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void transfer(long studentId, long targetRoom, long operator) {
-        lockStudent(studentId);
+        Gender gender = rules.lockStudent(studentId);
         var stay = currentStay(studentId).orElseThrow(() -> conflict("This student is not checked in."));
         long source = stay.roomId();
         if (source == targetRoom) throw conflict("Select a different room.");
@@ -47,6 +50,7 @@ public class Housing {
         int first = rooms.lockCapacity(Math.min(source, targetRoom));
         int second = rooms.lockCapacity(Math.max(source, targetRoom));
         ensureBedAvailable(targetRoom, targetRoom < source ? first : second);
+        rules.ensureCanAssign(studentId, gender, targetRoom);
         // The old stay ends at the same instant the new one starts.
         LocalDateTime now = time.now();
         closeStay(stay.id(), operator, "TRANSFER", "Room transfer", now);
@@ -55,7 +59,7 @@ public class Housing {
 
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public void checkout(long studentId, String reason, long operator) {
-        lockStudent(studentId);
+        rules.lockStudent(studentId);
         var stay = currentStay(studentId).orElseThrow(() -> conflict("This student is not checked in."));
         rooms.lockCapacity(stay.roomId());
         closeStay(stay.id(), operator, "CHECKOUT", reason.strip(), time.now());
@@ -86,11 +90,6 @@ public class Housing {
                         row.getObject("check_out_at", LocalDateTime.class).toInstant(ZoneOffset.UTC),
                         row.getString("departure_type"), row.getString("departure_reason"), row.getString("processed_by")))
                 .list();
-    }
-
-    private void lockStudent(long id) {
-        jdbc.sql("SELECT id FROM student WHERE id = ? FOR UPDATE")
-                .param(id).query(Long.class).optional().orElseThrow(() -> notFound("Student"));
     }
 
     private java.util.Optional<CurrentStay> currentStay(long student) {

@@ -6,6 +6,20 @@ const option = (label = "Select an option") => ["", label];
 const primary = (label, action) => button(label, action, "primary");
 const tableLink = (label, href) => element("a", {class: "button subtle", href: "#" + href}, label);
 const emptyState = label => element("p", {class: "empty"}, label);
+const genders = {FEMALE: "Female", MALE: "Male"};
+const policies = {MIXED: "Mixed", FEMALE_ONLY: "Female only", MALE_ONLY: "Male only"};
+
+/** Whether a room's building policy and current residents accept a student of this gender. */
+function fits(room, gender) {
+    return (room.genderPolicy === "MIXED" || room.genderPolicy === gender + "_ONLY")
+        && (!room.residentGender || room.residentGender === gender);
+}
+
+function allocation(room) {
+    if (room.genderPolicy !== "MIXED") return policies[room.genderPolicy];
+    if (!room.residentGender) return "Any gender";
+    return genders[room.residentGender] ? genders[room.residentGender] + " residents" : "Mixed residents";
+}
 
 function metric(label, value) {
     return element("div", {class: "metric"}, element("dt", {}, label), element("dd", {}, value));
@@ -68,6 +82,7 @@ async function buildingView(ctx) {
         form(ctx, building ? "Edit building" : "Add building", [
             {name: "name", label: "Building name", value: building?.name, maxLength: 80},
             {name: "description", label: "Description", type: "textarea", value: building?.description, maxLength: 240, required: false},
+            {name: "genderPolicy", label: "Gender policy", value: building?.genderPolicy ?? "MIXED", options: Object.entries(policies)},
             {name: "managerId", label: "Dormitory staff", value: building?.managerId,
                 options: [option("Unassigned"), ...managerOptions], required: false}
         ], "/admin/buildings" + (building ? "/" + building.id : ""), building ? "PUT" : "POST",
@@ -75,6 +90,7 @@ async function buildingView(ctx) {
     }
     const columns = [
         ["Building", row => person(row.name, row.description)],
+        ["Gender policy", row => pill(policies[row.genderPolicy], row.genderPolicy === "MIXED" ? "" : "info")],
         ["Assigned staff", row => row.managerName || "Unassigned"]
     ];
     if (ctx.isAdmin) {
@@ -100,6 +116,7 @@ async function roomView(ctx) {
     }
     const columns = [
         ["Room", locationCell],
+        ["Allocation", allocation],
         ["Capacity", row => row.capacity],
         ["Occupied", row => row.occupied],
         ["Available", row => pill(row.capacity === row.occupied ? "Full" : String(row.capacity - row.occupied),
@@ -110,8 +127,8 @@ async function roomView(ctx) {
     return page("Rooms", "Review room capacity and available beds.", ctx.isAdmin && primary("Add room", () => edit()),
         table(rooms, columns, {
             title: "Rooms", search: row => [row.roomNumber, row.buildingName],
-            filter: {label: "Filter by building", all: "All buildings",
-                options: buildings.map(b => [b.id, b.name]), value: row => row.buildingId}
+            filters: [{label: "Filter by building", all: "All buildings",
+                options: buildings.map(b => [b.id, b.name]), value: row => row.buildingId}]
         }));
 }
 
@@ -121,13 +138,18 @@ async function studentView(ctx) {
         form(ctx, student ? "Edit student" : "Add student", [
             {name: "studentNumber", label: "Student number", value: student?.studentNumber, maxLength: 40},
             {name: "fullName", label: "Full name", value: student?.fullName, maxLength: 80},
-            {name: "program", label: "Program", value: student?.program, maxLength: 100, required: false}
+            {name: "gender", label: "Gender", value: student?.gender, options: [option("Select gender"), ...Object.entries(genders)]},
+            {name: "program", label: "Program", value: student?.program, maxLength: 100, required: false},
+            {name: "phone", label: "Phone", type: "tel", value: student?.phone, maxLength: 30, required: false},
+            {name: "email", label: "Email", type: "email", value: student?.email, maxLength: 120, required: false}
         ], "/admin/students" + (student ? "/" + student.id : ""), student ? "PUT" : "POST", data => data, "Student saved.");
     }
     function assign(student) {
         const transfer = Boolean(student.roomId);
-        const roomsWithBeds = rooms.filter(room => room.id !== student.roomId && room.occupied < room.capacity);
-        if (!roomsWithBeds.length) { ctx.notify("There are no available beds in an eligible room."); return; }
+        if (!student.gender) { ctx.notify("Record " + student.fullName + "’s gender before assigning a room."); return; }
+        const roomsWithBeds = rooms.filter(room => room.id !== student.roomId && room.occupied < room.capacity
+            && fits(room, student.gender));
+        if (!roomsWithBeds.length) { ctx.notify("No room with an available bed fits this student."); return; }
         const operation = transfer ? "transfer" : "check-in";
         form(ctx, (transfer ? "Transfer " : "Check in ") + student.fullName, [
             {name: "roomId", label: transfer ? "Destination room" : "Room",
@@ -148,6 +170,10 @@ async function studentView(ctx) {
     return page("Students", "Manage student records, room assignments and departures.", primary("Add student", () => edit()),
         table(students, [
             ["Student", row => person(row.fullName, row.studentNumber)],
+            ["Gender", row => genders[row.gender] ?? pill("Not recorded", "warn")],
+            ["Contact", row => row.email || row.phone
+                ? element("div", {}, element("span", {}, row.email || row.phone), row.email && row.phone && element("small", {}, row.phone))
+                : "—"],
             ["Program", row => row.program || "—"],
             ["Room", row => row.roomId ? locationCell(row) : "—"],
             ["Status", row => pill(status[row.status], row.status === "RESIDENT" ? "good" : "")],
@@ -157,8 +183,13 @@ async function studentView(ctx) {
                 row.roomId && button("Check out", () => checkout(row)),
                 row.status === "UNASSIGNED" && button("Delete", () => remove(ctx, "student", row.fullName, "/admin/students/" + row.id)))]
         ], {
-            title: "Students", search: row => [row.fullName, row.studentNumber, row.program, row.buildingName, row.roomNumber],
-            filter: {label: "Filter by housing status", all: "All statuses", options: Object.entries(status), value: row => row.status}
+            title: "Students",
+            search: row => [row.fullName, row.studentNumber, row.program, row.email, row.phone, row.buildingName, row.roomNumber],
+            filters: [
+                {label: "Filter by housing status", all: "All statuses", options: Object.entries(status), value: row => row.status},
+                {label: "Filter by gender", all: "All genders", options: [...Object.entries(genders), ["NONE", "Not recorded"]],
+                    value: row => row.gender ?? "NONE"}
+            ]
         }));
 }
 
@@ -200,7 +231,7 @@ async function historyView(ctx) {
             ["Reason", row => row.departureReason], ["Processed by", row => row.processedBy]
         ], {
             title: "Housing history", search: row => [row.fullName, row.studentNumber, row.buildingName, row.departureReason],
-            filter: {label: "Filter by event type", all: "All events", options: Object.entries(types), value: row => row.departureType}
+            filters: [{label: "Filter by event type", all: "All events", options: Object.entries(types), value: row => row.departureType}]
         }));
 }
 

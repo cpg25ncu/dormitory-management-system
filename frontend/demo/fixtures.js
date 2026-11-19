@@ -6,9 +6,9 @@ export function localDay(value = new Date()) {
 
 export function demoFixtures() {
     const buildings = [
-        {id: 1, name: "Cedar Hall", description: "North campus residence", managerId: 2},
-        {id: 2, name: "Maple Hall", description: "East campus residence", managerId: null},
-        {id: 3, name: "Willow Hall", description: "South campus residence", managerId: null}
+        {id: 1, name: "Cedar Hall", description: "North campus residence", genderPolicy: "MIXED", managerId: 2},
+        {id: 2, name: "Maple Hall", description: "East campus residence for male students", genderPolicy: "MALE_ONLY", managerId: null},
+        {id: 3, name: "Willow Hall", description: "South campus residence for female students", genderPolicy: "FEMALE_ONLY", managerId: null}
     ];
     const rooms = [
         [1, 1, "101", 4], [2, 1, "102", 4], [3, 1, "201", 4],
@@ -16,21 +16,22 @@ export function demoFixtures() {
         [7, 3, "A01", 2], [8, 3, "A02", 2]
     ].map(([id, buildingId, roomNumber, capacity]) => ({id, buildingId, roomNumber, capacity}));
     const roster = [
-        ["Avery Chen", "Computer Science", 1],
-        ["Clara Bennett", "Architecture", 1],
-        ["Dylan Rivera", "Mechanical Engineering", 2],
-        ["Elliot Park", "Data Science", 2],
-        ["Harper Ellis", "Computer Science", 3],
-        ["Jamie Patel", "Business", 4],
-        ["Jordan Lee", "Design", 5],
-        ["Micah Brooks", "Civil Engineering", 6],
-        ["Noah Gomez", "Mathematics", 6],
-        ["Robin Davis", "Computer Science", 7],
-        ["Sasha Okafor", "Architecture", 8],
-        ["Taylor Nguyen", "Information Systems", null]
+        ["Avery Chen", "FEMALE", "Computer Science", 1],
+        ["Clara Bennett", "FEMALE", "Architecture", 1],
+        ["Dylan Rivera", "MALE", "Mechanical Engineering", 2],
+        ["Elliot Park", "MALE", "Data Science", 2],
+        ["Harper Ellis", "FEMALE", "Computer Science", 3],
+        ["Jamie Patel", "MALE", "Business", 4],
+        ["Jordan Lee", "MALE", "Design", 5],
+        ["Micah Brooks", "MALE", "Civil Engineering", 6],
+        ["Noah Gomez", "MALE", "Mathematics", 6],
+        ["Robin Davis", "FEMALE", "Computer Science", 7],
+        ["Sasha Okafor", "FEMALE", "Architecture", 8],
+        ["Taylor Nguyen", "FEMALE", "Information Systems", null]
     ];
-    const students = roster.map(([fullName, program], index) => ({
-        id: index + 1, studentNumber: "DEMO-" + String(index + 1).padStart(3, "0"), fullName, program
+    const students = roster.map(([fullName, gender, program], index) => ({
+        id: index + 1, studentNumber: "DEMO-" + String(index + 1).padStart(3, "0"), fullName, gender, program,
+        phone: null, email: fullName.toLowerCase().replace(" ", ".") + "@students.example.org"
     }));
     const midnight = days => {
         const date = new Date();
@@ -39,7 +40,7 @@ export function demoFixtures() {
         return date;
     };
     const daysAgo = days => localDay(midnight(days));
-    const stays = roster.flatMap(([, , roomId], index) => roomId === null ? [] : [{
+    const stays = roster.flatMap(([, , , roomId], index) => roomId === null ? [] : [{
         id: index + 1, studentId: index + 1, roomId, checkInAt: midnight(14).toISOString()
     }]);
     const absences = [

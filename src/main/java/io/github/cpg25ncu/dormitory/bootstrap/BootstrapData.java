@@ -61,34 +61,36 @@ public class BootstrapData implements ApplicationRunner {
         accounts.createStaff(new Accounts.NewStaff(DEMO_STAFF_USERNAME, "Morgan Reed", DEMO_STAFF_PASSWORD));
         long adminId = accounts.loadUserByUsername(username).id();
         long staffId = accounts.loadUserByUsername(DEMO_STAFF_USERNAME).id();
-        jdbc.sql("INSERT INTO building (name, description, manager_id) VALUES (?, ?, ?)")
-                .params("Cedar Hall", "North campus residence", staffId).update();
-        jdbc.sql("INSERT INTO building (name, description) VALUES (?, ?), (?, ?)")
-                .params("Maple Hall", "East campus residence", "Willow Hall", "South campus residence").update();
+        jdbc.sql("INSERT INTO building (name, description, gender_policy, manager_id) VALUES (?, ?, ?, ?)")
+                .params("Cedar Hall", "North campus residence", "MIXED", staffId).update();
+        jdbc.sql("INSERT INTO building (name, description, gender_policy) VALUES (?, ?, ?), (?, ?, ?)")
+                .params("Maple Hall", "East campus residence for male students", "MALE_ONLY",
+                        "Willow Hall", "South campus residence for female students", "FEMALE_ONLY").update();
         seedRooms("Cedar Hall", List.of("101", "102", "201"), 4);
         seedRooms("Maple Hall", List.of("110", "111", "210"), 3);
         seedRooms("Willow Hall", List.of("A01", "A02"), 2);
 
-        record DemoStudent(String name, String program, String building, String room) {}
+        record DemoStudent(String name, String gender, String program, String building, String room) {}
         var students = List.of(
-                new DemoStudent("Avery Chen", "Computer Science", "Cedar Hall", "101"),
-                new DemoStudent("Clara Bennett", "Architecture", "Cedar Hall", "101"),
-                new DemoStudent("Dylan Rivera", "Mechanical Engineering", "Cedar Hall", "102"),
-                new DemoStudent("Elliot Park", "Data Science", "Cedar Hall", "102"),
-                new DemoStudent("Harper Ellis", "Computer Science", "Cedar Hall", "201"),
-                new DemoStudent("Jamie Patel", "Business", "Maple Hall", "110"),
-                new DemoStudent("Jordan Lee", "Design", "Maple Hall", "111"),
-                new DemoStudent("Micah Brooks", "Civil Engineering", "Maple Hall", "210"),
-                new DemoStudent("Noah Gomez", "Mathematics", "Maple Hall", "210"),
-                new DemoStudent("Robin Davis", "Computer Science", "Willow Hall", "A01"),
-                new DemoStudent("Sasha Okafor", "Architecture", "Willow Hall", "A02"),
-                new DemoStudent("Taylor Nguyen", "Information Systems", "", ""));
+                new DemoStudent("Avery Chen", "FEMALE", "Computer Science", "Cedar Hall", "101"),
+                new DemoStudent("Clara Bennett", "FEMALE", "Architecture", "Cedar Hall", "101"),
+                new DemoStudent("Dylan Rivera", "MALE", "Mechanical Engineering", "Cedar Hall", "102"),
+                new DemoStudent("Elliot Park", "MALE", "Data Science", "Cedar Hall", "102"),
+                new DemoStudent("Harper Ellis", "FEMALE", "Computer Science", "Cedar Hall", "201"),
+                new DemoStudent("Jamie Patel", "MALE", "Business", "Maple Hall", "110"),
+                new DemoStudent("Jordan Lee", "MALE", "Design", "Maple Hall", "111"),
+                new DemoStudent("Micah Brooks", "MALE", "Civil Engineering", "Maple Hall", "210"),
+                new DemoStudent("Noah Gomez", "MALE", "Mathematics", "Maple Hall", "210"),
+                new DemoStudent("Robin Davis", "FEMALE", "Computer Science", "Willow Hall", "A01"),
+                new DemoStudent("Sasha Okafor", "FEMALE", "Architecture", "Willow Hall", "A02"),
+                new DemoStudent("Taylor Nguyen", "FEMALE", "Information Systems", "", ""));
         LocalDate today = time.today();
         int index = 0;
         for (var student : students) {
             String number = "DEMO-%03d".formatted(++index);
-            jdbc.sql("INSERT INTO student (student_number, full_name, program) VALUES (?, ?, ?)")
-                    .params(number, student.name(), student.program()).update();
+            String email = student.name().toLowerCase(java.util.Locale.ROOT).replace(' ', '.') + "@students.example.org";
+            jdbc.sql("INSERT INTO student (student_number, full_name, gender, program, email) VALUES (?, ?, ?, ?, ?)")
+                    .params(number, student.name(), student.gender(), student.program(), email).update();
             if (student.room().isEmpty()) continue;
             jdbc.sql("""
                     INSERT INTO stay (student_id, room_id, active_student_id, check_in_at, check_in_by)
