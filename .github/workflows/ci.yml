@@ -74,7 +74,6 @@ jobs:
           import json
           import os
           import time
-          from urllib.error import URLError
           from urllib.parse import urlencode
           from urllib.request import build_opener, HTTPCookieProcessor, Request
 
@@ -89,7 +88,7 @@ jobs:
                   with browser.open(request, timeout=3) as response:
                       assert response.status == 204
                   break
-              except URLError:
+              except OSError:
                   if attempt == 44:
                       raise
                   time.sleep(2)
@@ -100,6 +99,6 @@ jobs:
           assert json.load(browser.open(base + "/buildings", timeout=3)) == []
           PY
       - if: failure()
-        run: docker compose logs
+        run: docker compose logs --no-color app
       - if: always()
         run: docker compose down --volumes
