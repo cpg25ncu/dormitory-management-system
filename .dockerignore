@@ -2,6 +2,8 @@
 .github
 .env
 .env.*
-target
 docs
+src
+target/*
+!target/dormitory-management-system-*.jar
 *.log

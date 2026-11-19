@@ -4,19 +4,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
-import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.context.ActiveProfiles;
@@ -24,6 +21,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -155,14 +154,14 @@ class ResidenceWorkflowsTest {
         var session = (MockHttpSession) initial.getRequest().getSession(false);
         var csrf = json.readTree(initial.getResponse().getContentAsString());
         var signedIn = mvc.perform(post("/api/login").session(session)
-                        .header(csrf.get("csrfHeader").asText(), csrf.get("csrfToken").asText())
+                        .header(csrf.get("csrfHeader").asString(), csrf.get("csrfToken").asString())
                         .param("username", username).param("password", password))
                 .andExpect(status().isNoContent()).andReturn();
         var signedInSession = (MockHttpSession) signedIn.getRequest().getSession(false);
         var state = mvc.perform(get("/api/session").session(signedInSession)).andReturn();
         var payload = json.readTree(state.getResponse().getContentAsString());
-        assertThat(payload.get("user").get("username").asText()).isEqualTo(username);
-        return new Login(signedInSession, payload.get("csrfHeader").asText(), payload.get("csrfToken").asText());
+        assertThat(payload.get("user").get("username").asString()).isEqualTo(username);
+        return new Login(signedInSession, payload.get("csrfHeader").asString(), payload.get("csrfToken").asString());
     }
 
     private long building(Login admin, String name) throws Exception {
@@ -191,9 +190,8 @@ class ResidenceWorkflowsTest {
     }
 
     private static JsonNode find(JsonNode rows, String key, String value) {
-        for (Iterator<JsonNode> iterator = rows.elements(); iterator.hasNext(); ) {
-            var row = iterator.next();
-            if (value.equals(row.get(key).asText())) return row;
+        for (JsonNode row : rows) {
+            if (value.equals(row.get(key).asString())) return row;
         }
         throw new AssertionError("Fixture not found: " + key + " = " + value);
     }

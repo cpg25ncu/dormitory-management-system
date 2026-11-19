@@ -32,9 +32,10 @@ Try adding a student as an administrator, assigning a Cedar Hall room, then reco
 
 ## Run with persistent storage
 
-Copy `.env.example` to `.env` and set distinct values for `DORM_DB_PASSWORD` and `DORM_ADMIN_PASSWORD`. Start the application and MySQL 8.4 with Docker Compose.
+Copy `.env.example` to `.env` and set distinct values for `DORM_DB_PASSWORD` and `DORM_ADMIN_PASSWORD`. Build the application JAR, then start the application and MySQL 8.4 with Docker Compose.
 
 ```bash
+mvn -B verify
 docker compose up --build -d
 docker compose logs -f app
 ```
@@ -60,6 +61,6 @@ docs/               Architecture and deployment
 .github/workflows/  Java build and MySQL integration checks
 ```
 
-The application uses Java, Spring Boot MVC, Spring JDBC, Spring Security, Flyway and MySQL. The browser interface uses HTML, CSS and native JavaScript modules. Read [Architecture](docs/architecture.md) for the data model, access rules and transaction design.
+The application uses Java, Spring Boot 4, Spring MVC, Spring JDBC, Spring Security, Flyway and MySQL. The browser interface uses HTML, CSS and native JavaScript modules. Read [Architecture](docs/architecture.md) for the data model, access rules and transaction design.
 
-`mvn verify` checks sign-in, session invalidation, request protection, building scope, concurrent requests for the last available bed, transfers and checkout. CI runs the suite against both H2 and MySQL 8.4 and verifies first sign-in in a clean Docker Compose deployment.
+`mvn verify` checks sign-in, session invalidation, request protection, building scope, concurrent requests for the last available bed, transfers and checkout. CI runs the suite against both H2 and MySQL 8.4 and reuses the tested JAR to verify first sign-in in a clean Docker Compose deployment.
