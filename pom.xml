@@ -79,6 +79,13 @@
                 <directory>frontend/src</directory>
                 <targetPath>static</targetPath>
             </resource>
+            <resource>
+                <directory>${project.basedir}</directory>
+                <targetPath>META-INF</targetPath>
+                <includes>
+                    <include>LICENSE</include>
+                </includes>
+            </resource>
         </resources>
         <plugins>
             <plugin>

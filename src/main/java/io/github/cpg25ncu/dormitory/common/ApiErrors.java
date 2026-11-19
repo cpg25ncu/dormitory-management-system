@@ -1,5 +1,6 @@
 package io.github.cpg25ncu.dormitory.common;
 
+import org.springframework.core.annotation.Order;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -9,6 +10,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
 
 @RestControllerAdvice
+@Order(-1) // Preserve field details before Spring Boot's problem-details handler at order 0.
 public class ApiErrors {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ProblemDetail invalidInput(MethodArgumentNotValidException exception) {

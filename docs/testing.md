@@ -22,7 +22,7 @@ npx playwright install chromium
 npm test
 ```
 
-Playwright starts the JAR in demo mode on port `18080` and shuts it down after the run. The test signs in as an administrator, creates and checks in a student, records an absence as assigned staff, then transfers and checks out the student as an administrator. It checks the staff building scope and the resulting housing history. Failed runs write traces to `frontend/test-results/`.
+Playwright starts the packaged Spring Boot JAR with its H2 demo profile on port `18080` and shuts it down after the run. The suite covers the administrator and staff workflow from check-in through absence recording, transfer and checkout. It also checks form validation, full rooms and duplicate check-ins, out-of-scope staff requests, and preservation of current assignments, occupancy and history after rejected requests. Failed runs write traces to `frontend/test-results/`.
 
 Set `DORM_TEST_BROWSER_CHANNEL` to `chrome` or `msedge` before running `npm test` to use a locally installed browser.
 
@@ -48,7 +48,7 @@ The HTTP integration suite checks sign-in, CSRF, building scope, session revocat
 | --- | --- |
 | Java 17 and H2 | Clean Maven build, integration tests and publication of the tested JAR as a workflow artifact |
 | MySQL 8.4 integration | The same tests against the database used for deployment |
-| Browser workflow | Both roles working through the UI served by the JAR from the Java job |
+| Browser workflow | Both roles, validation messages and rejected writes in the UI served by the verified JAR |
 | Docker Compose startup | Flyway, first administrator initialization and sign-in in a fresh MySQL deployment with the same JAR |
 
 See the [workflow](../.github/workflows/ci.yml) and [deployment guide](deployment.md).

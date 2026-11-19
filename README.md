@@ -4,11 +4,13 @@
 
 Dormitory Manager is a web application for university residence operations. It manages buildings, room capacity, student assignments and absence records through separate administrator and staff workspaces.
 
-## Live Demo
+## Interactive UI Demo (Simulated Backend)
 
 [Open the interactive browser demo](https://cpg25ncu-dormitory-demo.notablecake16.chatgpt.site)
 
-Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out and choose **Use staff** to record an absence, then switch back to the administrator to transfer the student or check them out. The demo uses fictional records and stores changes in your browser tab. **Reset demo** restores the starting records.
+The online demo runs in your browser with fictional, tab-local records. The [full-stack deployment](#run-with-persistent-storage) enforces permissions in Spring Security and persists records in MySQL.
+
+Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out and choose **Use staff** to record an absence, then switch back to the administrator to transfer the student or check them out. **Reset demo** restores the starting records.
 
 ![Administrator overview showing available beds, occupancy by building and recent absences](docs/media/overview.png)
 
@@ -26,7 +28,7 @@ Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out an
 - **Concurrent bed allocation.** Check-in locks the student and room rows with `SELECT … FOR UPDATE` and counts active stays inside the transaction. When two requests compete for the last bed, the integration test verifies one succeeds and the other returns HTTP 409. [Housing service](src/main/java/io/github/cpg25ncu/dormitory/housing/Housing.java) · [Integration tests](src/test/java/io/github/cpg25ncu/dormitory/ResidenceWorkflowsTest.java)
 - **Transaction consistency.** Transfers acquire room locks in ascending order, close the existing stay, and open the destination stay in one transaction. Tests verify a failed transfer preserves the original assignment and a checkout releases its bed while keeping the recorded history. [Transaction design](docs/architecture.md#check-in-transfers-and-checkout)
 - **Role-based access control.** Spring Security reserves administration endpoints for administrators. Database queries restrict staff to assigned buildings, including which residents they can record absences for. Disabling an account or changing its credentials invalidates its existing sessions. [Access rules](docs/architecture.md#request-boundaries)
-- **Automated verification.** GitHub Actions runs the backend workflow suite against H2 and MySQL 8.4, then uses the verified JAR for the Playwright cross-role workflow and the Compose startup check. [Testing and CI](docs/testing.md)
+- **Automated verification.** GitHub Actions runs the backend workflow suite against H2 and MySQL 8.4. Playwright exercises the packaged Spring Boot application, including rejected check-ins and transfers, staff building scope, and form error messages. Compose verifies startup and administrator sign-in with MySQL. [Testing and CI](docs/testing.md)
 
 ## Screenshots
 
@@ -86,3 +88,7 @@ Maven packages the frontend with Spring Boot in one JAR. The browser loads the U
 - [Testing and CI](docs/testing.md)
 - [Deployment and backups](docs/deployment.md)
 - [Contribution guide](.github/CONTRIBUTING.md)
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
