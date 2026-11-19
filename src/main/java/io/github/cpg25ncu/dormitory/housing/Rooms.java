@@ -24,8 +24,14 @@ public class Rooms {
 
     public List<Room> list(AccountPrincipal account) {
         return jdbc.sql("""
-                SELECT r.id, r.room_number, r.building_id, b.name AS building_name, r.capacity,
-                    (SELECT COUNT(*) FROM stay st WHERE st.room_id = r.id AND st.check_out_at IS NULL) AS occupied
+                SELECT r.id, r.room_number, r.building_id, b.name AS building_name, b.gender_policy, r.capacity,
+                    (SELECT COUNT(*) FROM stay st WHERE st.room_id = r.id AND st.check_out_at IS NULL) AS occupied,
+                    (SELECT CASE WHEN COUNT(*) = 0 THEN NULL
+                                 WHEN SUM(CASE WHEN s.gender = 'FEMALE' THEN 1 ELSE 0 END) = COUNT(*) THEN 'FEMALE'
+                                 WHEN SUM(CASE WHEN s.gender = 'MALE' THEN 1 ELSE 0 END) = COUNT(*) THEN 'MALE'
+                                 ELSE 'MIXED' END
+                     FROM stay st JOIN student s ON s.id = st.student_id
+                     WHERE st.room_id = r.id AND st.check_out_at IS NULL) AS resident_gender
                 FROM room r JOIN building b ON b.id = r.building_id
                 WHERE (:admin = TRUE OR b.manager_id = :account)
                 ORDER BY b.name, r.room_number, r.id
@@ -63,7 +69,12 @@ public class Rooms {
                 .param(id).query(Integer.class).single();
     }
 
-    public record Room(long id, String roomNumber, long buildingId, String buildingName, int capacity, int occupied) {}
+    /**
+     * A room with its occupancy. {@code residentGender} is the gender shared by all current residents, null for
+     * an empty room, or MIXED when residents differ or include one whose gender is not recorded.
+     */
+    public record Room(long id, String roomNumber, long buildingId, String buildingName, GenderPolicy genderPolicy,
+                       int capacity, int occupied, String residentGender) {}
     public record NewRoom(@Positive long buildingId, @NotBlank @Size(max = 30) String roomNumber,
                           @Positive @Max(30) int capacity) {}
     public record RoomUpdate(@NotBlank @Size(max = 30) String roomNumber, @Positive @Max(30) int capacity) {}

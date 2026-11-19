@@ -165,6 +165,7 @@ td .button { padding-inline: .45rem; }
 .pill { display: inline-block; border-radius: 99px; padding: .17rem .57rem; font-weight: 660; font-size: .75rem; color: #4c5b53; background: #edf1ee; white-space: nowrap; }
 .pill.good { background: #dff1e6; color: #21593e; }
 .pill.warn { background: #f8ecda; color: #775219; }
+.pill.info { background: #e4ecf6; color: #2c4c73; }
 dialog {
     color: var(--ink); border-radius: var(--radius); border: 1px solid var(--line);
     padding: 0; width: min(94vw, 29rem); max-height: 90vh; box-shadow: 0 25px 80px #14281f35;

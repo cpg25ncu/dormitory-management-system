@@ -36,7 +36,7 @@ export function actionGroup(...actions) {
 }
 
 export function table(rows, columns, options = {}) {
-    const { title, search, filter, empty = "No records to display.", compact = false } = options;
+    const { title, search, filters = [], empty = "No records to display.", compact = false } = options;
     const body = element("tbody");
     const grid = element("table", {"aria-label": title},
         element("thead", {}, element("tr", {}, columns.map(([heading]) => element("th", {scope: "col"}, heading)))),
@@ -46,12 +46,12 @@ export function table(rows, columns, options = {}) {
     const panel = element("section", {class: "panel"}, scroll, noRows);
     const searchBox = search && element("input", {type: "search", "aria-label": "Search " + title,
         placeholder: "Search " + title.toLowerCase()});
-    const select = filter && element("select", {"aria-label": filter.label},
+    const selects = filters.map(filter => ({filter, control: element("select", {"aria-label": filter.label},
         element("option", {value: ""}, filter.all),
-        filter.options.map(([value, label]) => element("option", {value}, label)));
-    if (searchBox || select || compact) {
+        filter.options.map(([value, label]) => element("option", {value}, label)))}));
+    if (searchBox || selects.length || compact) {
         panel.prepend(element("div", {class: "panel-header"}, element("h2", {}, title),
-            element("div", {class: "table-controls"}, searchBox, select, options.link)));
+            element("div", {class: "table-controls"}, searchBox, selects.map(({control}) => control), options.link)));
     }
 
     let currentPage = 0;
@@ -64,10 +64,9 @@ export function table(rows, columns, options = {}) {
 
     function refresh() {
         const query = searchBox?.value.trim().toLowerCase() || "";
-        const selected = select?.value || "";
         const visible = rows.filter(row =>
             (!query || search(row).join(" ").toLowerCase().includes(query)) &&
-            (!selected || String(filter.value(row)) === selected));
+            selects.every(({filter, control}) => !control.value || String(filter.value(row)) === control.value));
         const start = currentPage * pageSize;
         const end = Math.min(start + pageSize, visible.length);
         const batch = compact ? visible : visible.slice(start, end);
@@ -83,7 +82,7 @@ export function table(rows, columns, options = {}) {
 
     function resetPage() { currentPage = 0; refresh(); }
     searchBox?.addEventListener("input", resetPage);
-    select?.addEventListener("change", resetPage);
+    selects.forEach(({control}) => control.addEventListener("change", resetPage));
     refresh();
     return panel;
 }

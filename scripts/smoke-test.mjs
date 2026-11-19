@@ -69,7 +69,7 @@ async function housingWorkflow(session) {
     const room = (await expectStatus("api/rooms", 200)).find(item => item.buildingId === building.id);
 
     const studentNumber = `SMOKE-${suffix}`;
-    await expectStatus("api/admin/students", 201, {method: "POST", json: {studentNumber, fullName: "Smoke Test Resident"}, session});
+    await expectStatus("api/admin/students", 201, {method: "POST", json: {studentNumber, fullName: "Smoke Test Resident", gender: "FEMALE"}, session});
     const student = (await expectStatus("api/admin/students", 200)).find(item => item.studentNumber === studentNumber);
     await expectStatus(`api/admin/students/${student.id}/check-in`, 201, {method: "POST", json: {roomId: room.id}, session});
 

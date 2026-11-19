@@ -1,6 +1,6 @@
 import {demoFixtures, localDay} from "./fixtures.js";
 
-const storageKey = "dormitory-browser-demo-v1";
+const storageKey = "dormitory-browser-demo-v2";
 const staff = {id: 2, role: "STAFF", username: "staff", displayName: "Morgan Reed", enabled: true};
 const admin = {id: 1, role: "ADMIN", username: "admin", displayName: "System Administrator"};
 const accounts = {admin, staff};
@@ -77,6 +77,32 @@ function occupied(roomId) {
     return data.stays.filter(stay => stay.roomId === roomId && !stay.checkOutAt).length;
 }
 
+// The same gender rules as the server: building policies, single-gender rooms and a recorded gender.
+function residentGenders(stays) {
+    return new Set(stays.filter(stay => !stay.checkOutAt).map(stay => find(data.students, stay.studentId).gender ?? null));
+}
+
+function residentGender(roomId) {
+    const values = residentGenders(data.stays.filter(stay => stay.roomId === roomId));
+    if (!values.size) return null;
+    const [only] = values;
+    return values.size === 1 && only ? only : "MIXED";
+}
+
+function admits(policy, gender) {
+    return policy === "MIXED" || policy === gender + "_ONLY";
+}
+
+function ensureCanAssign(student, room) {
+    requireCondition(student.gender, 409, "Record this student's gender before assigning a room.");
+    const {genderPolicy} = find(data.buildings, room.buildingId);
+    requireCondition(admits(genderPolicy, student.gender), 409,
+        "The selected building houses " + genderPolicy.replace("_ONLY", "").toLowerCase() + " students only.");
+    const roommates = data.stays.filter(stay => stay.roomId === room.id && stay.studentId !== student.id);
+    requireCondition([...residentGenders(roommates)].every(gender => gender === student.gender), 409,
+        "The selected room has residents who are not recorded as " + student.gender.toLowerCase() + ".");
+}
+
 function list(route, user) {
     const visibleBuildings = data.buildings.filter(building => visibleBuilding(building, user));
     const visibleIds = new Set(visibleBuildings.map(building => building.id));
@@ -87,7 +113,8 @@ function list(route, user) {
             }));
         case "rooms":
             return data.rooms.filter(room => visibleIds.has(room.buildingId)).map(room => ({
-                ...room, buildingName: roomLocation(room).buildingName, occupied: occupied(room.id)
+                ...room, buildingName: roomLocation(room).buildingName, occupied: occupied(room.id),
+                genderPolicy: find(data.buildings, room.buildingId).genderPolicy, residentGender: residentGender(room.id)
             }));
         case "residents":
             return data.stays.filter(stay => !stay.checkOutAt).map(resident)
@@ -117,7 +144,7 @@ function list(route, user) {
 }
 
 function housing(studentId, action, input, user) {
-    find(data.students, studentId);
+    const student = find(data.students, studentId);
     const stay = activeStay(studentId);
     requireCondition(action === "check-in" ? !stay : stay, 409,
         action === "check-in" ? "This student already has a room assignment." : "This student is not checked in.");
@@ -126,6 +153,7 @@ function housing(studentId, action, input, user) {
         const room = find(data.rooms, input.roomId);
         requireCondition(room.id !== stay?.roomId, 409, "Select a different room.");
         requireCondition(occupied(room.id) < room.capacity, 409, "The selected room has no available beds.");
+        ensureCanAssign(student, room);
         data.stays.push({id: data.nextId++, studentId, roomId: room.id, checkInAt: now});
     }
     if (stay) Object.assign(stay, {
@@ -164,7 +192,15 @@ function updateDirectory(collection, id, method, input) {
     let uniqueKey;
     switch (collection) {
         case "buildings":
-            fields = {name: input.name.trim(), description: input.description.trim(), managerId: input.managerId};
+            fields = {name: input.name.trim(), description: (input.description ?? "").trim(),
+                genderPolicy: input.genderPolicy ?? "MIXED", managerId: input.managerId};
+            if (entry && fields.genderPolicy !== "MIXED") {
+                const roomIds = new Set(data.rooms.filter(room => room.buildingId === id).map(room => room.id));
+                const only = fields.genderPolicy.replace("_ONLY", "");
+                requireCondition([...residentGenders(data.stays.filter(stay => roomIds.has(stay.roomId)))]
+                    .every(gender => gender === only), 409,
+                    "This building has residents who are not recorded as " + only.toLowerCase() + ".");
+            }
             uniqueKey = "name";
             break;
         case "rooms":
@@ -175,10 +211,22 @@ function updateDirectory(collection, id, method, input) {
                 "Capacity cannot be less than the number of residents.");
             uniqueKey = "roomNumber";
             break;
-        case "students":
-            fields = {studentNumber: input.studentNumber.trim(), fullName: input.fullName.trim(), program: input.program.trim()};
+        case "students": {
+            const optional = value => value?.trim() || null;
+            fields = {studentNumber: input.studentNumber.trim(), fullName: input.fullName.trim(), gender: input.gender,
+                program: input.program?.trim() ?? "", phone: optional(input.phone), email: optional(input.email)};
+            requireCondition(["FEMALE", "MALE"].includes(fields.gender), 400, "gender must not be null");
+            const stay = entry && fields.gender !== entry.gender ? activeStay(id) : null;
+            if (stay) {
+                const room = find(data.rooms, stay.roomId);
+                requireCondition(admits(find(data.buildings, room.buildingId).genderPolicy, fields.gender)
+                    && [...residentGenders(data.stays.filter(item => item.roomId === room.id && item.studentId !== id))]
+                        .every(gender => gender === fields.gender), 409,
+                    "This gender does not match the student's current building or roommates. Transfer the student first.");
+            }
             uniqueKey = "studentNumber";
             break;
+        }
     }
     requireCondition(fields[uniqueKey] && (collection !== "students" || fields.fullName), 400, "Complete the required fields.");
     requireCondition(!records.some(record => record.id !== id && record.buildingId === fields.buildingId

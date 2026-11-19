@@ -52,7 +52,7 @@ async function housingFixtures(page, studentCount) {
     const studentNumbers = [];
     for (let index = 1; index <= studentCount; index++) {
         const studentNumber = "BROWSER-" + suffix + "-" + index;
-        await post(page, "/admin/students", {studentNumber, fullName: "Browser Resident " + studentNumber});
+        await post(page, "/admin/students", {studentNumber, fullName: "Browser Resident " + studentNumber, gender: "FEMALE"});
         studentNumbers.push(studentNumber);
     }
     const rooms = (await read(page, "/rooms")).filter(room => room.buildingId === building.id);
@@ -101,6 +101,7 @@ test("administrator and building staff complete a residence workflow", async ({p
     await page.getByRole("button", {name: "Add student"}).click();
     await page.getByLabel("Student number").fill(studentNumber);
     await page.getByLabel("Full name").fill(studentName);
+    await page.getByLabel("Gender", {exact: true}).selectOption("Female");
     await save(page);
 
     const student = page.getByRole("row").filter({hasText: studentNumber});
@@ -133,9 +134,9 @@ test("administrator and building staff complete a residence workflow", async ({p
     await signIn(page, "administrator");
     await navigate(page, "Students");
     await student.getByRole("button", {name: "Transfer"}).click();
-    await page.getByLabel("Destination room").selectOption({label: "Maple Hall · 110 (2 available)"});
+    await page.getByLabel("Destination room").selectOption({label: "Willow Hall · A01 (1 available)"});
     await save(page);
-    await expect(student.getByText("Maple Hall", {exact: true})).toBeVisible();
+    await expect(student.getByText("Willow Hall", {exact: true})).toBeVisible();
 
     await student.getByRole("button", {name: "Check out"}).click();
     await page.getByLabel("Reason").fill("End of residence");
@@ -144,7 +145,7 @@ test("administrator and building staff complete a residence workflow", async ({p
 
     await navigate(page, "Housing history");
     await expect(student.filter({hasText: "Room transfer"})).toContainText("Cedar Hall");
-    await expect(student.filter({hasText: "End of residence"})).toContainText("Maple Hall");
+    await expect(student.filter({hasText: "End of residence"})).toContainText("Willow Hall");
 });
 
 test("check-in refuses a room filled after the assignment form opened", async ({page}) => {
@@ -216,6 +217,7 @@ test("server validation displays a field error without adding an invalid student
     await page.getByRole("button", {name: "Add student"}).click();
     await page.getByLabel("Student number").fill(studentNumber);
     await page.getByLabel("Full name").fill("   ");
+    await page.getByLabel("Gender", {exact: true}).selectOption("Male");
 
     await rejectForm(page, "/admin/students", 400, "fullName must not be blank");
     expect((await read(page, "/admin/students")).some(student => student.studentNumber === studentNumber)).toBe(false);
@@ -243,4 +245,24 @@ test("a rejected transfer leaves occupancy, active stay and history unchanged", 
     await page.getByRole("dialog").getByRole("button", {name: "Cancel"}).click();
     await navigate(page, "Housing history");
     await expect(page.getByRole("row").filter({hasText: resident.studentNumber})).toHaveCount(0);
+});
+
+test("room choices follow the building policy and the gender of current residents", async ({page}) => {
+    await page.goto("/");
+    await signIn(page, "administrator");
+    const studentNumber = "BROWSER-GENDER-" + randomUUID().slice(0, 8);
+    await post(page, "/admin/students", {studentNumber, fullName: "Browser Gender Resident", gender: "MALE"});
+    await navigate(page, "Students");
+    const rooms = await (await openAssignment(page, {studentNumber}, "Check in")).locator("option").allTextContents();
+
+    // Maple Hall houses male students, Willow Hall female students, and Cedar Hall is mixed.
+    expect(rooms.some(room => room.startsWith("Maple Hall · "))).toBe(true);
+    expect(rooms.some(room => room.startsWith("Willow Hall · "))).toBe(false);
+    expect(rooms.some(room => room.startsWith("Cedar Hall · 102 "))).toBe(true);
+    expect(rooms.some(room => room.startsWith("Cedar Hall · 101 "))).toBe(false);
+    await page.getByRole("dialog").getByRole("button", {name: "Cancel"}).click();
+
+    await navigate(page, "Buildings");
+    const buildings = page.getByRole("table", {name: "Buildings"});
+    await expect(buildings.getByRole("row").filter({hasText: "Willow Hall"})).toContainText("Female only");
 });
