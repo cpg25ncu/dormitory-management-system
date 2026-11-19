@@ -6,7 +6,7 @@ Dormitory Manager is a web application for university residence operations. It m
 
 ## Live Demo
 
-[Open the interactive browser demo](https://cpg25ncu-dormitory-demo.notablecake16.chatgpt.site)
+[Open the interactive browser demo](https://cpg25ncu.github.io/dormitory-management-system/)
 
 Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out and choose **Use staff** to record an absence, then switch back to the administrator to transfer the student or check them out. The demo uses fictional records and stores changes in your browser tab. **Reset demo** restores the starting records.
 
@@ -25,8 +25,10 @@ Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out an
 
 - **Concurrent bed allocation.** Check-in locks the student and room rows with `SELECT … FOR UPDATE` and counts active stays inside the transaction. When two requests compete for the last bed, the integration test verifies one succeeds and the other returns HTTP 409. [Housing service](src/main/java/io/github/cpg25ncu/dormitory/housing/Housing.java) · [Integration tests](src/test/java/io/github/cpg25ncu/dormitory/ResidenceWorkflowsTest.java)
 - **Transaction consistency.** Transfers acquire room locks in ascending order, close the existing stay, and open the destination stay in one transaction. Tests verify a failed transfer preserves the original assignment and a checkout releases its bed while keeping the recorded history. [Transaction design](docs/architecture.md#check-in-transfers-and-checkout)
+- **Residence time zone.** Timestamps are stored in UTC, while calendar days follow the configured residence time zone. Staff can record today's absences right after local midnight, before the UTC date changes. Tests pin the application clock to those hours, and the browser suite runs the server at UTC+14. [Dates and time zones](docs/deployment.md#dates-and-time-zones) · [Time tests](src/test/java/io/github/cpg25ncu/dormitory/ResidenceTimeTest.java)
 - **Role-based access control.** Spring Security reserves administration endpoints for administrators. Database queries restrict staff to assigned buildings, including which residents they can record absences for. Disabling an account or changing its credentials invalidates its existing sessions. [Access rules](docs/architecture.md#request-boundaries)
-- **Automated verification.** GitHub Actions runs the backend workflow suite against H2 and MySQL 8.4. Playwright exercises the packaged Spring Boot application, including rejected check-ins and transfers, staff building scope, and form error messages. Compose verifies startup and administrator sign-in with MySQL. [Testing and CI](docs/testing.md)
+- **Deployable from source.** A multi-stage Dockerfile builds the layered Spring Boot image and runs it as an unprivileged user. Public health and readiness probes back the container health check. A smoke-test script verifies a running deployment. [Deployment and operations](docs/deployment.md)
+- **Automated verification.** GitHub Actions runs the backend suite against H2 and MySQL 8.4. Playwright exercises the packaged Spring Boot application, including rejected check-ins and transfers, staff building scope, and form error messages. CI then builds the Compose deployment from source and runs a housing workflow against MySQL. [Testing and CI](docs/testing.md)
 
 ## Screenshots
 
@@ -55,12 +57,11 @@ Try adding a student as an administrator, assigning a Cedar Hall room, then reco
 
 ## Run with persistent storage
 
-Copy `.env.example` to `.env` and set distinct values for `DORM_DB_PASSWORD` and `DORM_ADMIN_PASSWORD`. Build the application JAR, then start the application and MySQL 8.4 with Docker Compose.
+Docker Compose builds the application from source and runs it with MySQL 8.4, so no local JDK is needed. Copy `.env.example` to `.env`, set distinct values for `DORM_DB_PASSWORD` and `DORM_ADMIN_PASSWORD`, and set `DORM_TIME_ZONE` to the residence's time zone.
 
 ```bash
-sh ./mvnw -B clean verify
-docker compose up --build -d
-docker compose logs -f app
+cp .env.example .env
+docker compose up --build -d --wait
 ```
 
 Sign in at [http://127.0.0.1:8080](http://127.0.0.1:8080) with the configured administrator username and password. Flyway applies the schema at startup. The MySQL volume persists data between restarts, and the bootstrap password is used when creating the first administrator. See [Deployment and operations](docs/deployment.md) for configuration and backups.
@@ -74,8 +75,9 @@ Sign in at [http://127.0.0.1:8080](http://127.0.0.1:8080) with the configured ad
 | [src/main/java/](src/main/java/) | Spring Boot API, Spring Security and business logic |
 | [src/main/resources/](src/main/resources/) | Spring profiles and versioned Flyway migrations |
 | [src/test/](src/test/) | Spring MVC and database integration tests |
-| [compose.yaml](compose.yaml) | Application and MySQL deployment |
-| [.github/workflows/](.github/workflows/) | Build, MySQL, browser and Compose checks |
+| [Dockerfile](Dockerfile), [compose.yaml](compose.yaml) | Container image built from source, and the application and MySQL deployment |
+| [scripts/](scripts/) | Deployment smoke test |
+| [.github/workflows/](.github/workflows/) | Build, MySQL, browser and Compose checks, and the demo deployment |
 
 Maven packages the frontend with Spring Boot in one JAR. The browser loads the UI and API on the same origin. Node.js supports the Playwright test suite and the [standalone browser demo build](docs/testing.md#standalone-browser-demo).
 
