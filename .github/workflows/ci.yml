@@ -21,7 +21,7 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
-      - run: sh ./mvnw -B clean verify
+      - run: mvn -B clean verify
       - uses: actions/upload-artifact@v4
         with:
           name: dormitory-manager
@@ -88,7 +88,7 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: maven
-      - run: sh ./mvnw -B clean verify
+      - run: mvn -B clean verify
   container:
     name: Docker Compose startup
     needs: browser
