@@ -17,6 +17,7 @@ Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out an
 | System administrator | Dormitory staff |
 | --- | --- |
 | Manage buildings, rooms, student records and staff accounts | View buildings, rooms and residents within their assignments |
+| Set mixed, female-only or male-only building policies | See each room’s allocation and available beds |
 | Assign staff to buildings and manage account access | Record resident absences and review their buildings’ absence history |
 | Check students in, transfer rooms and check students out | Review live room occupancy and availability |
 | Review all absence records and housing history | Change their own password |
@@ -24,6 +25,7 @@ Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out an
 ## Engineering Highlights
 
 - **Concurrent bed allocation.** Check-in locks the student and room rows with `SELECT … FOR UPDATE` and counts active stays inside the transaction. When two requests compete for the last bed, the integration test verifies one succeeds and the other returns HTTP 409. [Housing service](src/main/java/io/github/cpg25ncu/dormitory/housing/Housing.java) · [Integration tests](src/test/java/io/github/cpg25ncu/dormitory/ResidenceWorkflowsTest.java)
+- **Allocation rules.** Building gender policies, single-gender rooms and a required recorded gender apply to every check-in and transfer. The reverse checks apply to policy and gender edits. All of these operations lock rows in one order: student, rooms, building. A concurrency test shows a policy change and a conflicting check-in cannot both succeed. [Allocation rules](docs/architecture.md#allocation-rules) · [Rule tests](src/test/java/io/github/cpg25ncu/dormitory/AllocationRulesTest.java)
 - **Transaction consistency.** Transfers acquire room locks in ascending order, close the existing stay, and open the destination stay in one transaction. Tests verify a failed transfer preserves the original assignment and a checkout releases its bed while keeping the recorded history. [Transaction design](docs/architecture.md#check-in-transfers-and-checkout)
 - **Residence time zone.** Timestamps are stored in UTC, while calendar days follow the configured residence time zone. Staff can record today's absences right after local midnight, before the UTC date changes. Tests pin the application clock to those hours, and the browser suite runs the server at UTC+14. [Dates and time zones](docs/deployment.md#dates-and-time-zones) · [Time tests](src/test/java/io/github/cpg25ncu/dormitory/ResidenceTimeTest.java)
 - **Role-based access control.** Spring Security reserves administration endpoints for administrators. Database queries restrict staff to assigned buildings, including which residents they can record absences for. Disabling an account or changing its credentials invalidates its existing sessions. [Access rules](docs/architecture.md#request-boundaries)
@@ -51,7 +53,7 @@ java -jar target/dormitory-management-system-1.0.0.jar --spring.profiles.active=
 
 On Windows, run `.\mvnw.cmd -B clean verify` in PowerShell in place of the first command.
 
-Open [Dormitory Manager on localhost](http://127.0.0.1:8080). The sign-in page offers two prefilled demo accounts. Their usernames are `admin` and `staff`. The staff workspace is assigned to Cedar Hall. Demo data is fictional and lives in an in-memory database for the duration of the process.
+Open [Dormitory Manager on localhost](http://127.0.0.1:8080). The sign-in page offers two prefilled demo accounts. Their usernames are `admin` and `staff`. The staff workspace is assigned to Cedar Hall, a mixed hall. Maple Hall houses male students and Willow Hall female students. Demo data is fictional and lives in an in-memory database for the duration of the process.
 
 Try adding a student as an administrator, assigning a Cedar Hall room, then recording an absence for that resident as staff. Sign back in as the administrator to transfer or check out the student and check the occupancy and history views.
 

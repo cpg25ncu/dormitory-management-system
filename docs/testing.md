@@ -42,7 +42,7 @@ Run the Maven verification command with these variables pointed at a dedicated e
 | `DORM_TEST_DB_USERNAME` | `dormitory_test` |
 | `DORM_TEST_DB_PASSWORD` | Password for that test database account |
 
-The HTTP integration suite checks sign-in, CSRF, building scope, session revocation, concurrent booking of the last bed, transfer rollback and checkout history. It also covers the public endpoints and the residence time zone. The suite replaces the application clock with one that a test can pin to an instant, so it checks the hours when the local date and the UTC date differ and that timestamps are stored in UTC.
+The HTTP integration suite checks sign-in, CSRF, building scope, session revocation, concurrent booking of the last bed, transfer rollback and checkout history. It also covers the public endpoints, the residence time zone and the allocation rules, including a policy change racing a check-in. The suite replaces the application clock with one that a test can pin to an instant, so it checks the hours when the local date and the UTC date differ and that timestamps are stored in UTC.
 
 ## GitHub Actions
 

@@ -36,6 +36,7 @@ erDiagram
 ```
 
 - A building can have one assigned staff account. A staff account can manage multiple buildings.
+- A building has a gender policy: mixed, female only or male only. A student has a gender, optional contact details and a program. Records created before genders were recorded keep a NULL gender until an administrator records it.
 - A stay records the student, room, opening operator and start time. Closed stays also record the departure type, reason, time and closing operator.
 - The database uses a nullable unique active-student reference to enforce one open stay per student. Vacancy is derived from room capacity less the count of open stays.
 - Absences reference the stay for the relevant building and room. The unique stay/date pair prevents duplicate entries. The operator and operational date are recorded.
@@ -47,6 +48,20 @@ erDiagram
 Housing writes lock the student row first. Changes that affect capacity also lock the applicable room rows, using ascending room IDs when a transfer involves two rooms. The service checks availability inside the transaction. A transfer closes the existing stay and opens the destination stay before committing. A room-capacity edit uses the same room lock and rejects capacity below current occupancy.
 
 The workflow tests exercise simultaneous check-ins for a single remaining bed and verify a failed transfer preserves the current assignment.
+
+## Allocation rules
+
+A check-in or transfer needs a recorded gender, a building whose policy houses that gender, and a room whose current residents share it. Every room is single-gender, including rooms in mixed buildings. Residents whose gender is not recorded count as a mismatch, so legacy records cannot hide a conflict. The same rules apply in reverse. A building cannot switch to a single-gender policy while a resident does not match it, and a resident's gender cannot change to one that does not fit their building or roommates.
+
+[`AllocationRules`](../src/main/java/io/github/cpg25ncu/dormitory/housing/AllocationRules.java) holds these checks and fixes the lock order for every operation that reads or changes them: student, then rooms by ascending ID, then building. A policy change locks only the building, and a gender change locks the student and then the student's current room and building. Whichever of two concurrent operations locks the building first commits first, and the other sees its result. Because every path acquires locks in the same order, they cannot deadlock. A test runs policy changes and check-ins concurrently and verifies that exactly one of each pair succeeds. Without the building lock, the test fails.
+
+| Rule | Rejected request | Response |
+| --- | --- | --- |
+| Gender recorded | Check-in or transfer of a student without a recorded gender | 409 |
+| Building policy | Assignment to a building whose policy excludes the student | 409 |
+| Single-gender rooms | Assignment to a room with residents not recorded as the student's gender | 409 |
+| Policy change | A single-gender policy while a resident is not recorded as that gender | 409 |
+| Gender change | A gender that does not fit the resident's building or roommates | 409 |
 
 ## Request boundaries
 
