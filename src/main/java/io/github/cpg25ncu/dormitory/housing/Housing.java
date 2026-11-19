@@ -104,7 +104,7 @@ public class Housing {
 
     private void closeStay(long stay, long operator, String type, String reason) {
         jdbc.sql("""
-                UPDATE stay SET active_student_id = NULL, check_out_at = CURRENT_TIMESTAMP,
+                UPDATE stay SET active_student_id = NULL, check_out_at = CURRENT_TIMESTAMP(6),
                     check_out_by = ?, departure_type = ?, departure_reason = ? WHERE id = ?
                 """).params(operator, type, reason, stay).update();
     }

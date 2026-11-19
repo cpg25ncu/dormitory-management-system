@@ -37,7 +37,7 @@ CREATE TABLE stay (
     student_id BIGINT NOT NULL,
     room_id BIGINT NOT NULL,
     active_student_id BIGINT UNIQUE,
-    check_in_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    check_in_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     check_in_by BIGINT NOT NULL,
     check_out_at TIMESTAMP(6),
     check_out_by BIGINT,
@@ -64,7 +64,7 @@ CREATE TABLE absence_record (
     absence_date DATE NOT NULL,
     reason VARCHAR(240) NOT NULL,
     recorded_by BIGINT NOT NULL,
-    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     UNIQUE (stay_id, absence_date),
     FOREIGN KEY (stay_id) REFERENCES stay(id),
     FOREIGN KEY (recorded_by) REFERENCES app_user(id)
