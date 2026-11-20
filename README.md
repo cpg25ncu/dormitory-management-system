@@ -6,7 +6,7 @@ Dormitory Manager is a web application for university residence operations. It m
 
 ## Live Demo
 
-[Open the interactive browser demo](https://cpg25ncu.github.io/dormitory-management-system/)
+[Open the interactive browser demo](https://cpg25ncu.github.io/dormitory-management-system/) · [Browse the API reference](https://cpg25ncu.github.io/dormitory-management-system/api/)
 
 Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out and choose **Use staff** to record an absence, then switch back to the administrator to transfer the student or check them out. The demo uses fictional records and stores changes in your browser tab. **Reset demo** restores the starting records.
 
@@ -89,10 +89,11 @@ Maven packages the frontend with Spring Boot in one JAR. The browser loads the U
 ## Development and contributors
 
 - [Architecture and roles](docs/architecture.md)
-- [OpenAPI contract](docs/openapi.yaml)
+- [API reference](https://cpg25ncu.github.io/dormitory-management-system/api/) rendered from the [OpenAPI contract](docs/openapi.yaml)
 - [Testing and CI](docs/testing.md)
 - [Deployment and backups](docs/deployment.md)
 - [Contribution guide](.github/CONTRIBUTING.md)
+- [Security policy](SECURITY.md)
 
 ## License
 

@@ -1,10 +1,11 @@
-name: Publish browser demo
+name: Publish browser demo and API reference
 on:
   push:
     branches: [main]
     paths:
       - 'frontend/src/**'
       - 'frontend/demo/**'
+      - 'docs/openapi.yaml'
       - '.github/workflows/demo.yml'
   workflow_dispatch:
 permissions:
