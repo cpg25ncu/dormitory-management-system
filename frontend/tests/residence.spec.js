@@ -328,3 +328,26 @@ test("student search pages server results and exports the matching rows", async 
     expect(lines[0]).toBe("Student number,Full name,Gender,Program,Phone,Email,Housing status,Building,Room");
     expect(lines.slice(1).map(line => line.split(",")[0])).toEqual(Array.from({length: 23}, (_, index) => number(index + 1)));
 });
+
+test("repeated failed sign-ins lock the account on this device with a clear message", async ({page}) => {
+    await page.goto("/");
+    await signIn(page, "administrator");
+    // A throwaway account keeps the shared demo accounts usable for the other tests.
+    const username = "locked-" + randomUUID().slice(0, 8);
+    await post(page, "/admin/staff", {username, displayName: "Locked Browser Staff", password: "Correct-Browser-Password"});
+    await page.getByRole("button", {name: "Sign out"}).click();
+    await expect(page.getByRole("heading", {name: "Sign in", exact: true})).toBeVisible();
+
+    const alert = page.locator("#login-error");
+    async function attempt(password, message) {
+        await page.getByLabel("Username", {exact: true}).fill(username);
+        await page.getByLabel("Password", {exact: true}).fill(password);
+        const response = page.waitForResponse(response => new URL(response.url()).pathname === "/api/login");
+        await page.getByRole("button", {name: "Sign in", exact: true}).click();
+        await response;
+        await expect(alert).toHaveText(message);
+    }
+    for (let count = 1; count <= 4; count++) await attempt("Wrong-Browser-Password", "Invalid username or password.");
+    await attempt("Wrong-Browser-Password", "Too many failed sign-in attempts. Try again in 15 minutes.");
+    await attempt("Correct-Browser-Password", "Too many failed sign-in attempts. Try again in 15 minutes.");
+});
