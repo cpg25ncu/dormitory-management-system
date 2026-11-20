@@ -11,6 +11,11 @@ java -jar target/dormitory-management-system-1.0.0.jar --spring.profiles.active=
 
 On Windows, use `.\mvnw.cmd -B clean verify` in PowerShell. Open the demo at [127.0.0.1 on port 8080](http://127.0.0.1:8080). After changing frontend files, rebuild and restart to see the changes. The demo seeds fictional data in a fresh H2 database at startup.
 
+`verify` also checks:
+
+- **Coverage.** JaCoCo writes a report to `target/site/jacoco/index.html`. The build fails if line coverage drops below 90% or branch coverage below 70%. The minimums are the `coverage.line.minimum` and `coverage.branch.minimum` properties in `pom.xml`.
+- **API contract.** [`OpenApiContractTest`](../src/test/java/io/github/cpg25ncu/dormitory/OpenApiContractTest.java) compares every `/api` endpoint in the application with the [OpenAPI contract](openapi.yaml). It fails when an endpoint is missing from the contract, or when the contract lists an endpoint that does not exist.
+
 ## Browser workflow
 
 After packaging, install the test dependencies with Node.js 24 and npm. Run these commands from the repository root.
@@ -34,13 +39,15 @@ The [demo workflow](../.github/workflows/demo.yml) builds the same directory and
 
 ## MySQL integration
 
-Run the Maven verification command with these variables pointed at a dedicated empty MySQL 8.4 database. The suite runs Flyway and writes demo and test fixtures.
+The integration suite runs on H2 by default. To run the same suite against MySQL 8.4, start Docker and add one property:
 
-| Variable | Example |
-| --- | --- |
-| `DORM_TEST_DB_URL` | `jdbc:mysql://127.0.0.1:3306/dormitory_test?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true` |
-| `DORM_TEST_DB_USERNAME` | `dormitory_test` |
-| `DORM_TEST_DB_PASSWORD` | Password for that test database account |
+```bash
+sh ./mvnw -B clean verify -Ddormitory.test.database=mysql
+```
+
+[Testcontainers](https://testcontainers.com/) starts a disposable MySQL 8.4 container for the run. It uses the same UTC session settings as a deployment, and Flyway migrates the container from an empty schema. No database account or connection settings are needed.
+
+## What the suite covers
 
 The HTTP integration suite checks sign-in, CSRF, building scope, session revocation, concurrent booking of the last bed, transfer rollback and checkout history. It also covers:
 
@@ -49,6 +56,7 @@ The HTTP integration suite checks sign-in, CSRF, building scope, session revocat
 - absence corrections and withdrawals
 - paged search, filters and CSV exports
 - sign-in throttling
+- password changes, staff account validation, and the rules for editing and deleting rooms, buildings and students
 
 A unit test covers CSV quoting and formula neutralization. The suite replaces the application clock with one that a test can pin to an instant, so it checks the hours when the local date and the UTC date differ and that timestamps are stored in UTC.
 
@@ -56,8 +64,8 @@ A unit test covers CSV quoting and formula neutralization. The suite replaces th
 
 | Check | What it verifies |
 | --- | --- |
-| Java 17 and H2 | Clean Maven build, integration tests and publication of the tested JAR as a workflow artifact |
-| MySQL 8.4 integration | The same tests against the database used for deployment |
+| Java 17 and H2 | Clean Maven build, integration tests, the coverage gate and the API contract test. Publishes the tested JAR and the coverage report as workflow artifacts and adds a coverage table to the run summary |
+| MySQL 8.4 integration | The same tests against MySQL 8.4 in a Testcontainers container |
 | Browser workflow | Both roles, validation messages and rejected writes in the UI served by the verified JAR |
 | Docker Compose deployment | The image builds from source, both containers pass their health checks, and the [smoke test](deployment.md#health-checks-and-verification) signs in and runs check-in, absence and checkout against a fresh MySQL volume in a non-UTC time zone |
 | Publish browser demo | Builds the standalone demo and deploys it to GitHub Pages |
