@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="HTTP API reference for Dormitory Manager.">
+    <title>Dormitory Manager API</title>
+    <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+    <style>
+        body { margin: 0; }
+        .fallback { font: 15px/1.5 system-ui, sans-serif; padding: 2rem; }
+    </style>
+</head>
+<body>
+    <div id="reference">
+        <p class="fallback">Loading the API reference… The contract is also available as <a href="openapi.yaml">openapi.yaml</a>.</p>
+    </div>
+    <!-- Redoc is pinned to one release and checked against its hash, so a changed file is not run. -->
+    <script src="https://cdn.jsdelivr.net/npm/redoc@2.5.4/bundles/redoc.standalone.js"
+            integrity="sha384-w447zOpYfw/1Tv/5AK9NfHTlQIqE3RVR6KY62jCyy9zNDgO64cMwGGP1Fj0zJVf5"
+            crossorigin="anonymous"></script>
+    <script>
+        Redoc.init("openapi.yaml", {
+            hideHostname: true,
+            expandResponses: "200,201,204",
+            theme: {
+                colors: {primary: {main: "#205944"}},
+                typography: {fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif",
+                    headings: {fontFamily: "system-ui, -apple-system, 'Segoe UI', sans-serif"}},
+                sidebar: {backgroundColor: "#f5f7f5"}
+            }
+        }, document.getElementById("reference"));
+    </script>
+</body>
+</html>

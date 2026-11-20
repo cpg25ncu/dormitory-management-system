@@ -35,7 +35,11 @@ Set `DORM_TEST_BROWSER_CHANNEL` to `chrome` or `msedge` before running `npm test
 
 Run `npm --prefix frontend run build:demo` from the repository root. The command copies the application UI into `frontend/demo/dist/` and supplies a browser-only transport that uses fictional fixtures and tab-local storage. Serve that directory over HTTP to test the same static build used for the public demo. The two preset roles cover room assignment, transfers, check-out and absence recording. The demo uses the viewer's time zone.
 
-The [demo workflow](../.github/workflows/demo.yml) builds the same directory and publishes it to GitHub Pages when the frontend changes on `main`.
+The build also writes an API reference to `api/`, which renders [openapi.yaml](openapi.yaml) with Redoc. The [demo workflow](../.github/workflows/demo.yml) builds the same directory and publishes it to GitHub Pages when the frontend or the contract changes on `main`.
+
+## Repository checks
+
+[CodeQL](../.github/workflows/codeql.yml) scans the Java, JavaScript and workflow code on every pull request, on `main` and weekly. Results appear under the repository's Security tab. [Dependabot](../.github/dependabot.yml) proposes Maven, npm and GitHub Actions updates weekly, grouping minor and patch releases. Each update runs the same checks as any other pull request.
 
 ## MySQL integration
 
@@ -68,6 +72,7 @@ A unit test covers CSV quoting and formula neutralization. The suite replaces th
 | MySQL 8.4 integration | The same tests against MySQL 8.4 in a Testcontainers container |
 | Browser workflow | Both roles, validation messages and rejected writes in the UI served by the verified JAR |
 | Docker Compose deployment | The image builds from source, both containers pass their health checks, and the [smoke test](deployment.md#health-checks-and-verification) signs in and runs check-in, absence and checkout against a fresh MySQL volume in a non-UTC time zone |
-| Publish browser demo | Builds the standalone demo and deploys it to GitHub Pages |
+| Publish browser demo and API reference | Builds the standalone demo and the Redoc API reference and deploys them to GitHub Pages |
+| CodeQL | Security analysis of Java, JavaScript and GitHub Actions workflows |
 
 See the [build workflow](../.github/workflows/ci.yml), [demo workflow](../.github/workflows/demo.yml) and [deployment guide](deployment.md).
