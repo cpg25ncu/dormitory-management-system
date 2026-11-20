@@ -10,7 +10,7 @@
     </parent>
     <groupId>io.github.cpg25ncu</groupId>
     <artifactId>dormitory-management-system</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <name>Dormitory Management System</name>
     <description>Manage dormitory rooms, assignments, and absence records</description>
     <properties>
