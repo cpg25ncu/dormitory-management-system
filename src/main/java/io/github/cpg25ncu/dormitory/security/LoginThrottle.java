@@ -64,7 +64,7 @@ public class LoginThrottle {
         if (updated.lockedUntil() == null) return Optional.empty();
         if (updated.failures() == maxFailures) {
             log.warn("Sign-in for '{}' from {} is locked for {} minutes after {} failed attempts.",
-                    key.username(), key.address(), Math.max(1, period.toMinutes()), maxFailures);
+                    forLog(key.username()), key.address(), Math.max(1, period.toMinutes()), maxFailures);
         }
         return Optional.of(period);
     }
@@ -80,9 +80,17 @@ public class LoginThrottle {
     }
 
     private static Key key(String username, String address) {
-        // Usernames are case-insensitive. Control characters are dropped so a username cannot forge log lines.
-        String normalized = username == null ? "" : username.strip().toLowerCase(Locale.ROOT).replaceAll("\\p{Cntrl}", "");
+        // Usernames are case-insensitive, as they are for sign-in.
+        String normalized = username == null ? "" : username.strip().toLowerCase(Locale.ROOT);
         return new Key(normalized.length() > 80 ? normalized.substring(0, 80) : normalized, address);
+    }
+
+    /**
+     * A submitted username is untrusted. Characters a username cannot contain are replaced, so a value with line
+     * breaks or other control characters cannot forge log lines.
+     */
+    static String forLog(String username) {
+        return username.replaceAll("[^a-z0-9._-]", "_");
     }
 
     private record Key(String username, String address) {}

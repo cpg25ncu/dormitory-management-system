@@ -8,6 +8,9 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
@@ -74,6 +77,19 @@ class LoginThrottleTest extends ApiIntegrationTest {
         }
         assertThat(attempt(" No-Such-User ", "Wrong-Password-1", "203.0.113.40").getStatus()).isEqualTo(429);
         assertThat(attempt("NO-SUCH-USER", "Wrong-Password-1", "203.0.113.40").getStatus()).isEqualTo(429);
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void theLockoutLogCannotBeForgedThroughTheUsername(CapturedOutput output) throws Exception {
+        clock.fix(START, RESIDENCE_ZONE);
+        String forged = "intruder\r\n2026-08-01 INFO Administrator signed in";
+        for (int attempt = 1; attempt <= 5; attempt++) attempt(forged, "Wrong-Password-1", "203.0.113.50");
+
+        assertThat(output.getOut())
+                .contains("Sign-in for 'intruder__2026-08-01_info_administrator_signed_in' from 203.0.113.50 is locked")
+                // Usernames are lower-cased, so this is how an injected line would read.
+                .doesNotContain("\n2026-08-01 info administrator signed in");
     }
 
     private void staffAccount(String username, String password) throws Exception {

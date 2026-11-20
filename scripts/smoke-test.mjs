@@ -2,6 +2,7 @@
 // Checks a running deployment: health, session bootstrap and administrator sign-in.
 // With --write it also checks a student in, records an absence for the residence's
 // current day and checks the student out. Use --write only on a disposable database.
+// Settings come from environment variables, and the script never prints their values.
 //
 // Usage: DORM_ADMIN_PASSWORD=... node scripts/smoke-test.mjs [--write] [base-url]
 
@@ -101,13 +102,13 @@ async function main() {
     check(session.demo === false && session.demoAccounts.length === 0, "The deployment is running the demo profile.");
     const expectedZone = process.env.DORM_TIME_ZONE;
     check(!expectedZone || session.timeZone === expectedZone,
-        `The residence time zone is ${session.timeZone}, expected ${expectedZone}.`);
+        `The residence time zone is ${session.timeZone}, which does not match DORM_TIME_ZONE.`);
 
     await expectStatus("api/login", 204, {method: "POST", form: {username, password}, session});
     session = await expectStatus("api/session", 200);
-    check(session.user?.role === "ADMIN", `${username} is not an administrator.`);
+    check(session.user?.role === "ADMIN", "The DORM_ADMIN_USERNAME account is not an administrator.");
     await expectStatus("api/buildings", 200);
-    console.log(`✓ Signed in as ${username} (${session.timeZone})`);
+    console.log(`✓ Signed in as the administrator (${session.timeZone})`);
 
     if (write) await housingWorkflow(session);
     await expectStatus("api/logout", 204, {method: "POST", session});
