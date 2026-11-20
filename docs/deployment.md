@@ -48,7 +48,7 @@ After a deployment or upgrade, run the smoke test with Node.js 20 or newer. It w
 DORM_ADMIN_PASSWORD='the administrator password' node scripts/smoke-test.mjs http://127.0.0.1:8080/
 ```
 
-Add `--write` to also check a student in, record an absence for the current local day and check the student out. The write check adds records, so use it only against a disposable database.
+Add `--write` to also check a student in, record an absence for the current local day, export it as CSV and check the student out. The write check adds records, so use it only against a disposable database.
 
 ## Database lifecycle
 
