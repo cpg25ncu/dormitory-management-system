@@ -1,5 +1,7 @@
 # Text files use LF in the repository and in every checkout, as .editorconfig expects.
 * text=auto eol=lf
-mvnw.cmd text eol=crlf
+# The Windows wrapper script is stored with CRLF, exactly as the Maven Wrapper and Dependabot write it,
+# so wrapper updates change only the lines that differ.
+mvnw.cmd -text
 *.png binary
 *.jar binary
