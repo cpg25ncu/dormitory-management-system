@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "test": "playwright test",
-    "build:demo": "node demo/build.mjs"
+    "build:demo": "node demo/build.mjs",
+    "screenshots": "playwright test --config playwright.screenshots.config.js"
   },
   "devDependencies": {
     "@playwright/test": "1.65.1"
