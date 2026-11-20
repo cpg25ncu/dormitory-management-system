@@ -40,6 +40,7 @@ erDiagram
 - A stay records the student, room, opening operator and start time. Closed stays also record the departure type, reason, time and closing operator.
 - The database uses a nullable unique active-student reference to enforce one open stay per student. Vacancy is derived from room capacity less the count of open stays.
 - Absences reference the stay for the relevant building and room. The unique stay/date pair prevents duplicate entries. The operator and operational date are recorded.
+- An absence record can be corrected or withdrawn by anyone who can see its building. A correction keeps the stay and records who made it and when. Its date must fall within the stay, so a record for a resident who has since moved can still be corrected. A withdrawal records who withdrew the record, when and why, and keeps the record for review. Recording the same resident and day again restores the withdrawn record. Every absence write locks the stay row first, so writes for one stay run one at a time and none can race a checkout of that stay.
 - Stay timestamps come from the application clock and are stored in UTC. Absence dates are calendar days in the residence's configured time zone, and an absence must fall on or after the local day of the check-in. `ResidenceTime` holds these rules, and tests replace its clock to check the hours when the local and UTC dates differ.
 - Referential integrity protects housing and absence history. A student or room linked to a stay cannot be physically deleted through the API.
 
@@ -70,7 +71,7 @@ A check-in or transfer needs a recorded gender, a building whose policy houses t
 | `GET /api/session`, `POST /api/login`, `POST /api/logout` | Session and sign-in lifecycle |
 | `PUT /api/password` | Current user |
 | `GET /api/buildings`, `GET /api/rooms`, `GET /api/residents` | Administrators or the staff account’s assigned buildings |
-| `GET /api/absences`, `POST /api/absences` | Administrators or the staff account’s assigned buildings |
+| `GET /api/absences`, `POST /api/absences`, `PUT /api/absences/{id}`, `POST /api/absences/{id}/withdraw` | Administrators or the staff account’s assigned buildings |
 | `/api/admin/**` | Administrators only |
 
 Spring Security manages session cookies and CSRF protection. The browser retrieves the CSRF token from the session endpoint and supplies it with state-changing requests. Passwords use BCrypt. Disabling an account or changing its password increments its credential version, invalidating sessions issued under the old version. The API never returns password hashes.
