@@ -1,2 +1,5 @@
-mvnw text eol=lf
+# Text files use LF in the repository and in every checkout, as .editorconfig expects.
+* text=auto eol=lf
 mvnw.cmd text eol=crlf
+*.png binary
+*.jar binary
