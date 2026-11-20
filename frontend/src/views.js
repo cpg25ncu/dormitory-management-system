@@ -201,8 +201,15 @@ async function residentView(ctx) {
         ], {title: "Residents", search: row => [row.fullName, row.studentNumber, row.buildingName, row.roomNumber]}));
 }
 
+function absenceReason(row) {
+    const note = row.status === "WITHDRAWN"
+        ? "Withdrawn by " + row.withdrawnBy + ", " + formatTimestamp(row.withdrawnAt) + ": " + row.withdrawalReason
+        : row.updatedBy && "Corrected by " + row.updatedBy + ", " + formatTimestamp(row.updatedAt);
+    return element("div", {}, element("span", {}, row.reason), note && element("small", {}, note));
+}
+
 async function absenceView(ctx) {
-    const [absences, residents] = await Promise.all([ctx.api("/absences"), ctx.api("/residents")]);
+    const [absences, residents] = await Promise.all([ctx.api("/absences?status=all"), ctx.api("/residents")]);
     function addAbsence() {
         if (!residents.length) { ctx.notify("There are no active residents in your workspace."); return; }
         form(ctx, "Record absence", [
@@ -213,11 +220,41 @@ async function absenceView(ctx) {
             {name: "reason", label: "Reason", type: "textarea", maxLength: 240}
         ], "/absences", "POST", data => ({...data, stayId: Number(data.stayId)}), "Absence recorded.");
     }
+    function correct(record) {
+        ctx.openForm({
+            title: "Correct absence for " + record.fullName,
+            note: "To change the resident, withdraw this record and record a new one.",
+            fields: [
+                {name: "absenceDate", label: "Absence date", type: "date", value: record.absenceDate, max: today()},
+                {name: "reason", label: "Reason", type: "textarea", value: record.reason, maxLength: 240}
+            ],
+            action: data => ctx.api("/absences/" + record.id, "PUT", data),
+            success: "Absence record corrected."
+        });
+    }
+    function withdraw(record) {
+        ctx.openForm({
+            title: "Withdraw absence for " + record.fullName, submit: "Withdraw", destructive: true,
+            note: "The record leaves the absence log and stays available under withdrawn records.",
+            fields: [{name: "reason", label: "Reason for withdrawal", type: "textarea", maxLength: 240}],
+            action: data => ctx.api("/absences/" + record.id + "/withdraw", "POST", data),
+            success: "Absence record withdrawn."
+        });
+    }
+    const statuses = {ACTIVE: "Active records", WITHDRAWN: "Withdrawn records"};
     return page("Absences", "Record resident absences and review the log for your buildings.", primary("Record absence", addAbsence),
         table(absences, [
             ["Resident", row => person(row.fullName, row.studentNumber)], ["Room", locationCell],
-            ["Date", row => formatDate(row.absenceDate)], ["Reason", row => row.reason], ["Recorded by", row => row.recordedBy]
-        ], {title: "Absence records", search: row => [row.fullName, row.studentNumber, row.buildingName, row.absenceDate, row.reason]}));
+            ["Date", row => formatDate(row.absenceDate)], ["Reason", absenceReason], ["Recorded by", row => row.recordedBy],
+            ["Actions", row => row.status === "ACTIVE"
+                ? actionGroup(button("Correct", () => correct(row)), button("Withdraw", () => withdraw(row)))
+                : pill("Withdrawn", "warn")]
+        ], {
+            title: "Absence records",
+            search: row => [row.fullName, row.studentNumber, row.buildingName, row.absenceDate, row.reason, row.withdrawalReason],
+            filters: [{label: "Filter by record status", all: "All records", options: Object.entries(statuses),
+                value: row => row.status, initial: "ACTIVE"}]
+        }));
 }
 
 async function historyView(ctx) {

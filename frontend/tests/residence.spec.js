@@ -266,3 +266,33 @@ test("room choices follow the building policy and the gender of current resident
     const buildings = page.getByRole("table", {name: "Buildings"});
     await expect(buildings.getByRole("row").filter({hasText: "Willow Hall"})).toContainText("Female only");
 });
+
+test("staff correct an absence record and then withdraw it", async ({page}) => {
+    await page.goto("/");
+    await signIn(page, "staff");
+    const shift = (isoDate, days) => new Date(Date.parse(isoDate + "T00:00:00Z") + days * 86_400_000).toISOString().slice(0, 10);
+    const today = await residenceToday(page);
+    const resident = (await read(page, "/residents")).find(item => item.studentNumber === "DEMO-005");
+    const reason = "Browser correction " + randomUUID().slice(0, 8);
+    await post(page, "/absences", {stayId: resident.stayId, absenceDate: shift(today, -2), reason});
+
+    await navigate(page, "Absences");
+    await page.getByRole("row").filter({hasText: reason}).getByRole("button", {name: "Correct"}).click();
+    await page.getByLabel("Absence date").fill(shift(today, -1));
+    await page.getByLabel("Reason", {exact: true}).fill(reason + " (corrected)");
+    await save(page);
+    const corrected = page.getByRole("row").filter({hasText: reason + " (corrected)"});
+    await expect(corrected).toContainText("Corrected by Morgan Reed");
+
+    await corrected.getByRole("button", {name: "Withdraw"}).click();
+    await page.getByLabel("Reason for withdrawal").fill("Entered by mistake");
+    await page.getByRole("dialog").getByRole("button", {name: "Withdraw", exact: true}).click();
+    await expect(page.getByRole("dialog")).toBeHidden();
+    await expect(corrected).toHaveCount(0);
+
+    await page.getByRole("combobox", {name: "Filter by record status"}).selectOption("WITHDRAWN");
+    await expect(corrected).toContainText("Withdrawn by Morgan Reed");
+    await expect(corrected).toContainText("Entered by mistake");
+    const record = (await read(page, "/absences?status=withdrawn")).find(item => item.reason === reason + " (corrected)");
+    expect(record.absenceDate).toBe(shift(today, -1));
+});

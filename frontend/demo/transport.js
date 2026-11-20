@@ -1,6 +1,6 @@
 import {demoFixtures, localDay} from "./fixtures.js";
 
-const storageKey = "dormitory-browser-demo-v2";
+const storageKey = "dormitory-browser-demo-v3";
 const staff = {id: 2, role: "STAFF", username: "staff", displayName: "Morgan Reed", enabled: true};
 const admin = {id: 1, role: "ADMIN", username: "admin", displayName: "System Administrator"};
 const accounts = {admin, staff};
@@ -103,7 +103,7 @@ function ensureCanAssign(student, room) {
         "The selected room has residents who are not recorded as " + student.gender.toLowerCase() + ".");
 }
 
-function list(route, user) {
+function list(route, user, params) {
     const visibleBuildings = data.buildings.filter(building => visibleBuilding(building, user));
     const visibleIds = new Set(visibleBuildings.map(building => building.id));
     switch (route) {
@@ -119,11 +119,15 @@ function list(route, user) {
         case "residents":
             return data.stays.filter(stay => !stay.checkOutAt).map(resident)
                 .filter(row => visibleIds.has(row.buildingId));
-        case "absences":
+        case "absences": {
+            const wanted = (params.get("status") ?? "active").toUpperCase();
+            requireCondition(["ACTIVE", "WITHDRAWN", "ALL"].includes(wanted), 400, "status must be active, withdrawn or all.");
             return data.absences.map(absence => ({
-                ...resident(find(data.stays, absence.stayId)), ...absence
-            })).filter(row => visibleIds.has(row.buildingId))
+                ...resident(find(data.stays, absence.stayId)), ...absence,
+                status: absence.withdrawnAt ? "WITHDRAWN" : "ACTIVE"
+            })).filter(row => visibleIds.has(row.buildingId) && (wanted === "ALL" || row.status === wanted))
                 .sort((a, b) => b.absenceDate.localeCompare(a.absenceDate) || b.id - a.id);
+        }
         case "admin/staff":
             return [staff];
         case "admin/students":
@@ -164,17 +168,51 @@ function housing(studentId, action, input, user) {
     return action === "check-in" ? 201 : 204;
 }
 
+const cleared = {updatedBy: null, updatedAt: null, withdrawnBy: null, withdrawnAt: null, withdrawalReason: null};
+
 function recordAbsence(input, user) {
     const stay = find(data.stays, input.stayId);
     const building = find(data.buildings, find(data.rooms, stay.roomId).buildingId);
     requireCondition(input.absenceDate <= localDay(), 400, "Absence dates must be today or earlier.");
     requireCondition(!stay.checkOutAt && visibleBuilding(building, user)
         && localDay(stay.checkInAt) <= input.absenceDate, 404, "Active room assignment for that date was not found.");
-    requireCondition(!data.absences.some(item => item.stayId === stay.id && item.absenceDate === input.absenceDate),
-        409, "This resident already has an absence for that date.");
-    data.absences.push({id: data.nextId++, stayId: stay.id, absenceDate: input.absenceDate,
-        reason: input.reason.trim(), recordedBy: user.displayName});
+    const existing = data.absences.find(item => item.stayId === stay.id && item.absenceDate === input.absenceDate);
+    requireCondition(!existing || existing.withdrawnAt, 409, "This resident already has an absence record for that date.");
+    const recorded = {reason: input.reason.trim(), recordedBy: user.displayName, recordedAt: new Date().toISOString(), ...cleared};
+    // A withdrawn record for the same resident and day is restored rather than duplicated.
+    if (existing) Object.assign(existing, recorded);
+    else data.absences.push({id: data.nextId++, stayId: stay.id, absenceDate: input.absenceDate, ...recorded});
     return 201;
+}
+
+function visibleAbsence(id, user) {
+    const absence = find(data.absences, id);
+    const stay = find(data.stays, absence.stayId);
+    requireCondition(visibleBuilding(find(data.buildings, find(data.rooms, stay.roomId).buildingId), user), 404,
+        "Absence record was not found.");
+    return {absence, stay};
+}
+
+function correctAbsence(id, input, user) {
+    const {absence, stay} = visibleAbsence(id, user);
+    requireCondition(!absence.withdrawnAt, 409, "Withdrawn records cannot be corrected. Record the absence again instead.");
+    const first = localDay(stay.checkInAt);
+    const last = stay.checkOutAt && localDay(stay.checkOutAt) < localDay() ? localDay(stay.checkOutAt) : localDay();
+    requireCondition(input.absenceDate >= first && input.absenceDate <= last, 400,
+        "Choose a date during this stay, from " + first + " to " + last + ".");
+    requireCondition(!data.absences.some(item => item.id !== id && item.stayId === stay.id && item.absenceDate === input.absenceDate),
+        409, "This resident already has an absence record for that date.");
+    Object.assign(absence, {absenceDate: input.absenceDate, reason: input.reason.trim(),
+        updatedBy: user.displayName, updatedAt: new Date().toISOString()});
+    return 204;
+}
+
+function withdrawAbsence(id, input, user) {
+    const {absence} = visibleAbsence(id, user);
+    requireCondition(!absence.withdrawnAt, 409, "This absence record is already withdrawn.");
+    Object.assign(absence, {withdrawnBy: user.displayName, withdrawnAt: new Date().toISOString(),
+        withdrawalReason: input.reason.trim()});
+    return 204;
 }
 
 function updateDirectory(collection, id, method, input) {
@@ -256,12 +294,17 @@ export function request(url, {method, body}) {
         } else {
             requireCondition(user, 401, "Choose a demo role.");
             requireCondition(!route.startsWith("admin/") || user.role === "ADMIN", 403, "This role cannot perform that action.");
-            if (method === "GET") return json(list(route, user));
+            if (method === "GET") return json(list(route, user, url.searchParams));
             const input = body ? JSON.parse(body) : null;
             const [, collection, recordId, action] = route.split("/");
             let status;
+            const [absenceRoute, absenceId, absenceAction] = route.split("/");
             if (route === "absences") status = recordAbsence(input, user);
-            else if (collection === "students" && ["check-in", "transfer", "checkout"].includes(action)) {
+            else if (absenceRoute === "absences" && method === "PUT" && !absenceAction) {
+                status = correctAbsence(Number(absenceId), input, user);
+            } else if (absenceRoute === "absences" && absenceAction === "withdraw") {
+                status = withdrawAbsence(Number(absenceId), input, user);
+            } else if (collection === "students" && ["check-in", "transfer", "checkout"].includes(action)) {
                 status = housing(Number(recordId), action, input, user);
             } else if (["students", "rooms", "buildings"].includes(collection) && !action) {
                 status = updateDirectory(collection, Number(recordId), method, input);

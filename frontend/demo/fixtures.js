@@ -43,10 +43,14 @@ export function demoFixtures() {
     const stays = roster.flatMap(([, , , roomId], index) => roomId === null ? [] : [{
         id: index + 1, studentId: index + 1, roomId, checkInAt: midnight(14).toISOString()
     }]);
+    const absence = (id, stayId, days, reason, recordedBy) => ({
+        id, stayId, absenceDate: daysAgo(days), reason, recordedBy, recordedAt: midnight(days).toISOString(),
+        updatedBy: null, updatedAt: null, withdrawnBy: null, withdrawnAt: null, withdrawalReason: null
+    });
     const absences = [
-        {id: 1, stayId: 1, absenceDate: daysAgo(0), reason: "Approved overnight leave", recordedBy: "Morgan Reed"},
-        {id: 2, stayId: 4, absenceDate: daysAgo(1), reason: "Late return reported", recordedBy: "Morgan Reed"},
-        {id: 3, stayId: 7, absenceDate: daysAgo(3), reason: "Off-campus placement", recordedBy: "System Administrator"}
+        absence(1, 1, 0, "Approved overnight leave", "Morgan Reed"),
+        absence(2, 4, 1, "Late return reported", "Morgan Reed"),
+        absence(3, 7, 3, "Off-campus placement", "System Administrator")
     ];
     return {buildings, rooms, students, stays, absences, activeUser: null, nextId: 13};
 }

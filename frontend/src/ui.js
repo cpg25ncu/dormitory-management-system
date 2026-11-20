@@ -49,6 +49,7 @@ export function table(rows, columns, options = {}) {
     const selects = filters.map(filter => ({filter, control: element("select", {"aria-label": filter.label},
         element("option", {value: ""}, filter.all),
         filter.options.map(([value, label]) => element("option", {value}, label)))}));
+    for (const {filter, control} of selects) control.value = filter.initial ?? "";
     if (searchBox || selects.length || compact) {
         panel.prepend(element("div", {class: "panel-header"}, element("h2", {}, title),
             element("div", {class: "table-controls"}, searchBox, selects.map(({control}) => control), options.link)));
