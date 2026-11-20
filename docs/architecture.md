@@ -64,6 +64,14 @@ A check-in or transfer needs a recorded gender, a building whose policy houses t
 | Policy change | A single-gender policy while a resident is not recorded as that gender | 409 |
 | Gender change | A gender that does not fit the resident's building or roommates | 409 |
 
+## Lists and exports
+
+Students, absence records and housing history can grow without bound, so the server pages, searches and filters them. Each list takes `page`, `size` (at most 100) and `q`, plus its own filters, and returns `{items, page, size, totalItems, totalPages}` in a fixed order. Search is a case-insensitive match on text columns. The service escapes `%`, `_` and the escape character, so they match literally. Every filter is a bound parameter. Housing-history dates filter by the local day of departure in the residence's time zone. Migration V4 indexes the columns that set each list's order.
+
+The browser's table component keeps each list's search, filters and page between visits. It ignores a response that arrives after a newer request.
+
+Each list has a CSV export with the same filters and no paging. The export reads consecutive pages of 500 rows inside one read-only, repeatable-read transaction, so it writes a consistent snapshot without holding every row in memory. [`CsvWriter`](../src/main/java/io/github/cpg25ncu/dormitory/common/CsvWriter.java) writes RFC 4180 rows with CRLF line endings and a UTF-8 byte order mark, so spreadsheet applications detect the encoding. A cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a leading apostrophe, so a spreadsheet cannot run user-entered text as a formula. Phone numbers that start with `+` are exported with that apostrophe too.
+
 ## Request boundaries
 
 | API | Scope |
@@ -71,7 +79,7 @@ A check-in or transfer needs a recorded gender, a building whose policy houses t
 | `GET /api/session`, `POST /api/login`, `POST /api/logout` | Session and sign-in lifecycle |
 | `PUT /api/password` | Current user |
 | `GET /api/buildings`, `GET /api/rooms`, `GET /api/residents` | Administrators or the staff account’s assigned buildings |
-| `GET /api/absences`, `POST /api/absences`, `PUT /api/absences/{id}`, `POST /api/absences/{id}/withdraw` | Administrators or the staff account’s assigned buildings |
+| `GET /api/absences`, `GET /api/absences/export.csv`, `POST /api/absences`, `PUT /api/absences/{id}`, `POST /api/absences/{id}/withdraw` | Administrators or the staff account’s assigned buildings |
 | `/api/admin/**` | Administrators only |
 
 Spring Security manages session cookies and CSRF protection. The browser retrieves the CSRF token from the session endpoint and supplies it with state-changing requests. Passwords use BCrypt. Disabling an account or changing its password increments its credential version, invalidating sessions issued under the old version. The API never returns password hashes.
