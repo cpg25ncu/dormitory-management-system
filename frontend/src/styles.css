@@ -154,7 +154,7 @@ td { min-width: 4rem; overflow-wrap: anywhere; }
 td .actions { min-width: 8rem; }
 td small { color: var(--muted); display: block; }
 td .button { padding-inline: .45rem; }
-.table-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .55rem; }
+.table-controls { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .55rem; }
 .table-controls input { width: min(100%, 16rem); }
 .table-controls select { width: auto; max-width: 100%; }
 .table-controls input[type=date] { width: auto; }
