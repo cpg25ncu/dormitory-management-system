@@ -42,7 +42,10 @@ paths:
     post:
       operationId: signIn
       summary: Sign in with a username and password
-      description: Read the session again after signing in to obtain the current CSRF token.
+      description: >
+        Read the session again after signing in to obtain the current CSRF token. Five failed attempts for one
+        username from one client address within 15 minutes lock that pair for 15 minutes, even with the
+        correct password.
       security: []
       parameters:
         - $ref: '#/components/parameters/Csrf'
@@ -60,6 +63,15 @@ paths:
         '204': { description: Signed in }
         '401': { description: Credentials rejected }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '429':
+          description: Too many failed attempts for this username from this address
+          headers:
+            Retry-After:
+              description: Seconds until sign-in is allowed again
+              schema: { type: integer, minimum: 1 }
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /api/logout:
     post:
       operationId: signOut
