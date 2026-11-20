@@ -15,6 +15,10 @@ The image build runs Maven in a builder stage and copies the application into a 
 
 Sign in at [127.0.0.1 on port 8080](http://127.0.0.1:8080) and confirm the administrator can open the Overview. On a fresh database, the directory starts empty. Before an upgrade, back up the database and verify the new build. Run the same Compose command to rebuild and recreate the app container against the existing database.
 
+### Use a published image
+
+Each release publishes `ghcr.io/cpg25ncu/dormitory-management-system` with its version, such as `1.1.0`, and its minor version, such as `1.1`. To deploy a release without building it, replace `build: .` in `compose.yaml` with `image: ghcr.io/cpg25ncu/dormitory-management-system:1.1.0`, then run `docker compose up -d --wait`. To upgrade, change the tag, run the same command, and let Flyway migrate the database at startup.
+
 `docker compose down` stops the service and retains the MySQL volume. Use a separate Compose project and database when rehearsing a restore or a release.
 
 ## Configuration
