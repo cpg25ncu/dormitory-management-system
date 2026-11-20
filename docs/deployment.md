@@ -29,8 +29,11 @@ Sign in at [127.0.0.1 on port 8080](http://127.0.0.1:8080) and confirm the admin
 | `DORM_TIME_ZONE` | IANA time zone of the residence, such as `Asia/Shanghai` or `Europe/London`. Defaults to `UTC` in Compose and to the server's time zone when running the JAR directly. |
 | `DORM_PORT` | Local host port published by Compose. Defaults to `8080`. |
 | `DORM_SECURE_COOKIE` | Set to `true` when users access the app over HTTPS. |
+| `DORM_FORWARD_HEADERS` | Set to `native` behind a trusted reverse proxy, so sign-in throttling and logs see each client's address from `X-Forwarded-For`. Defaults to `none`. |
+| `DORM_LOGIN_MAX_FAILURES` | Failed sign-ins for one username from one address before it is locked. Defaults to `5`. |
+| `DORM_LOGIN_LOCKOUT` | How long those failures count and how long the lock lasts, such as `15m`. Defaults to `15m`. |
 
-Compose publishes the application on the loopback interface and keeps MySQL on its internal network. To provide remote access, terminate HTTPS at a reverse proxy and forward requests to the loopback port. Use a dedicated database account and configure TLS in the JDBC URL when MySQL is on a separate host.
+Compose publishes the application on the loopback interface and keeps MySQL on its internal network. To provide remote access, terminate HTTPS at a reverse proxy and forward requests to the loopback port. Set `DORM_SECURE_COOKIE=true` and `DORM_FORWARD_HEADERS=native`. Without forwarded headers, every request appears to come from the proxy. A client could then lock a username for everyone by failing its sign-in repeatedly. Use a dedicated database account and configure TLS in the JDBC URL when MySQL is on a separate host.
 
 The demo profile binds to loopback and uses a temporary database. Use the default profile with MySQL to store operational records.
 
