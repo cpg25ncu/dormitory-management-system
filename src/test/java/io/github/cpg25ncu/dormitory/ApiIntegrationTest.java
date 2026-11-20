@@ -11,11 +11,8 @@ import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
-import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockHttpSession;
@@ -28,13 +25,14 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Shared setup for HTTP integration tests. The suite runs against the demo profile on H2, or on MySQL
- * when {@code DORM_TEST_DB_URL} is set. All subclasses share one application context and database.
+ * Shared setup for HTTP integration tests. The suite runs against the demo profile on H2, or on MySQL in a
+ * container with {@code -Ddormitory.test.database=mysql}. All subclasses share one application context and
+ * database.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("demo")
-@Import(ApiIntegrationTest.TestClockConfiguration.class)
+@Import(TestClockConfiguration.class)
 abstract class ApiIntegrationTest {
     /** A zone ahead of UTC, so code that silently uses UTC dates fails for part of each day. */
     static final ZoneId RESIDENCE_ZONE = ZoneId.of("Asia/Shanghai");
@@ -44,13 +42,8 @@ abstract class ApiIntegrationTest {
     @Autowired MutableClock clock;
 
     @DynamicPropertySource
-    static void mysqlWhenConfigured(DynamicPropertyRegistry registry) {
-        String url = System.getenv("DORM_TEST_DB_URL");
-        if (url == null || url.isBlank()) return;
-        registry.add("spring.datasource.url", () -> url);
-        registry.add("spring.datasource.driver-class-name", () -> "com.mysql.cj.jdbc.Driver");
-        registry.add("spring.datasource.username", () -> System.getenv("DORM_TEST_DB_USERNAME"));
-        registry.add("spring.datasource.password", () -> System.getenv("DORM_TEST_DB_PASSWORD"));
+    static void database(DynamicPropertyRegistry registry) {
+        TestDatabase.register(registry);
     }
 
     @AfterEach
@@ -194,13 +187,4 @@ abstract class ApiIntegrationTest {
     }
 
     record Login(MockHttpSession session, String header, String token) {}
-
-    @TestConfiguration(proxyBeanMethods = false)
-    static class TestClockConfiguration {
-        @Bean
-        @Primary
-        MutableClock testClock() {
-            return new MutableClock(RESIDENCE_ZONE);
-        }
-    }
 }
