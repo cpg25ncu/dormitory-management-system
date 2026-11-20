@@ -1,0 +1,49 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Report security vulnerabilities privately as described in the
+        [security policy](https://github.com/cpg25ncu/dormitory-management-system/security/policy), not here.
+        Use fictional data in screenshots and logs.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Sign in as the administrator
+        2. Open Students and check in a student
+        3. ...
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where did it happen?
+      options:
+        - Docker Compose deployment
+        - Local demo profile
+        - Browser demo on GitHub Pages
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: v1.0.0 or a commit SHA
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: For example, the output of `docker compose logs app`.
+      render: text
