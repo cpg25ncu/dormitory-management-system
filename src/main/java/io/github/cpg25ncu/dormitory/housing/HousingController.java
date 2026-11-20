@@ -1,8 +1,18 @@
 package io.github.cpg25ncu.dormitory.housing;
 
+import static io.github.cpg25ncu.dormitory.common.CsvWriter.label;
+
 import io.github.cpg25ncu.dormitory.account.AccountPrincipal;
+import io.github.cpg25ncu.dormitory.common.CsvDownload;
+import io.github.cpg25ncu.dormitory.common.Page;
+import io.github.cpg25ncu.dormitory.common.ResidenceTime;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
+import java.io.IOException;
+import java.time.LocalDate;
 import java.util.List;
+import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.format.annotation.DateTimeFormat.ISO;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -12,10 +22,12 @@ import org.springframework.web.bind.annotation.*;
 public class HousingController {
     private final Housing housing;
     private final Rooms rooms;
+    private final ResidenceTime time;
 
-    HousingController(Housing housing, Rooms rooms) {
+    HousingController(Housing housing, Rooms rooms, ResidenceTime time) {
         this.housing = housing;
         this.rooms = rooms;
+        this.time = time;
     }
 
     @GetMapping("/rooms")
@@ -37,7 +49,29 @@ public class HousingController {
     List<Housing.Resident> residents(@AuthenticationPrincipal AccountPrincipal account) { return housing.residents(account); }
 
     @GetMapping("/admin/housing/history")
-    List<Housing.Departure> history() { return housing.history(); }
+    Page<Housing.Departure> history(@RequestParam(required = false) Integer page,
+                                    @RequestParam(required = false) Integer size,
+                                    @RequestParam(required = false) String q,
+                                    @RequestParam(required = false) String type,
+                                    @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate from,
+                                    @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to) {
+        return housing.history(Housing.HistoryFilter.of(q, type, from, to), Page.Request.of(page, size));
+    }
+
+    @GetMapping("/admin/housing/history/export.csv")
+    void exportHistory(@RequestParam(required = false) String q, @RequestParam(required = false) String type,
+                       @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate from,
+                       @RequestParam(required = false) @DateTimeFormat(iso = ISO.DATE) LocalDate to,
+                       HttpServletResponse response) throws IOException {
+        var filter = Housing.HistoryFilter.of(q, type, from, to);
+        try (var csv = CsvDownload.attachment(response, "housing-history", time.today())) {
+            csv.row("Student number", "Full name", "Building", "Room", "Checked in", "Closed", "Type", "Reason", "Processed by");
+            housing.exportHistory(filter, departure -> csv.row(departure.studentNumber(), departure.fullName(),
+                    departure.buildingName(), departure.roomNumber(), time.format(departure.checkInAt()),
+                    time.format(departure.checkOutAt()), label(departure.departureType()), departure.departureReason(),
+                    departure.processedBy()));
+        }
+    }
 
     @PostMapping("/admin/students/{id}/check-in")
     @ResponseStatus(HttpStatus.CREATED)

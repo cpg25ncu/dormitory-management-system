@@ -1,4 +1,4 @@
-import {actionGroup, button, element, formatDate, formatTimestamp, page, person, pill, table, timeZone, today} from "./ui.js";
+import {actionGroup, button, element, formatDate, formatTimestamp, page, pagedTable, person, pill, table, timeZone, today} from "./ui.js";
 
 const roomName = data => data.buildingName + " · " + data.roomNumber;
 const locationCell = row => person(row.roomNumber, row.buildingName);
@@ -38,8 +38,8 @@ function remove(ctx, noun, name, path) {
 }
 
 async function overview(ctx) {
-    const [buildings, rooms, absences] = await Promise.all([
-        ctx.api("/buildings"), ctx.api("/rooms"), ctx.api("/absences")
+    const [buildings, rooms, recent] = await Promise.all([
+        ctx.api("/buildings"), ctx.api("/rooms"), ctx.api("/absences?size=5")
     ]);
     const occupied = rooms.reduce((count, room) => count + room.occupied, 0);
     const capacity = rooms.reduce((count, room) => count + room.capacity, 0);
@@ -65,7 +65,7 @@ async function overview(ctx) {
         element("section", {class: "panel"},
             element("header", {class: "panel-header"}, element("h2", {}, "Occupancy by building"), tableLink("View rooms", "rooms")),
             occupancy.length ? element("div", {class: "occupancy-list"}, occupancy) : emptyState("No buildings in your workspace.")),
-        table(absences.slice(0, 5), [
+        table(recent.items, [
             ["Resident", row => person(row.fullName, row.studentNumber)],
             ["Building", row => row.buildingName],
             ["Date", row => formatDate(row.absenceDate)]
@@ -133,7 +133,7 @@ async function roomView(ctx) {
 }
 
 async function studentView(ctx) {
-    const [students, rooms] = await Promise.all([ctx.api("/admin/students"), ctx.api("/rooms")]);
+    const rooms = await ctx.api("/rooms");
     function edit(student) {
         form(ctx, student ? "Edit student" : "Add student", [
             {name: "studentNumber", label: "Student number", value: student?.studentNumber, maxLength: 40},
@@ -168,7 +168,7 @@ async function studentView(ctx) {
     }
     const status = {RESIDENT: "Resident", UNASSIGNED: "Unassigned", CHECKED_OUT: "Checked out"};
     return page("Students", "Manage student records, room assignments and departures.", primary("Add student", () => edit()),
-        table(students, [
+        await pagedTable(query => ctx.api("/admin/students?" + query), [
             ["Student", row => person(row.fullName, row.studentNumber)],
             ["Gender", row => genders[row.gender] ?? pill("Not recorded", "warn")],
             ["Contact", row => row.email || row.phone
@@ -184,12 +184,13 @@ async function studentView(ctx) {
                 row.status === "UNASSIGNED" && button("Delete", () => remove(ctx, "student", row.fullName, "/admin/students/" + row.id)))]
         ], {
             title: "Students",
-            search: row => [row.fullName, row.studentNumber, row.program, row.email, row.phone, row.buildingName, row.roomNumber],
             filters: [
-                {label: "Filter by housing status", all: "All statuses", options: Object.entries(status), value: row => row.status},
-                {label: "Filter by gender", all: "All genders", options: [...Object.entries(genders), ["NONE", "Not recorded"]],
-                    value: row => row.gender ?? "NONE"}
-            ]
+                {name: "status", label: "Filter by housing status", all: "All statuses",
+                    options: [["resident", "Resident"], ["unassigned", "Unassigned"], ["checked_out", "Checked out"]]},
+                {name: "gender", label: "Filter by gender", all: "All genders",
+                    options: [["female", "Female"], ["male", "Male"], ["none", "Not recorded"]]}
+            ],
+            exportTo: query => ctx.download("/admin/students/export.csv?" + query)
         }));
 }
 
@@ -209,7 +210,7 @@ function absenceReason(row) {
 }
 
 async function absenceView(ctx) {
-    const [absences, residents] = await Promise.all([ctx.api("/absences?status=all"), ctx.api("/residents")]);
+    const [buildings, residents] = await Promise.all([ctx.api("/buildings"), ctx.api("/residents")]);
     function addAbsence() {
         if (!residents.length) { ctx.notify("There are no active residents in your workspace."); return; }
         form(ctx, "Record absence", [
@@ -241,9 +242,8 @@ async function absenceView(ctx) {
             success: "Absence record withdrawn."
         });
     }
-    const statuses = {ACTIVE: "Active records", WITHDRAWN: "Withdrawn records"};
     return page("Absences", "Record resident absences and review the log for your buildings.", primary("Record absence", addAbsence),
-        table(absences, [
+        await pagedTable(query => ctx.api("/absences?" + query), [
             ["Resident", row => person(row.fullName, row.studentNumber)], ["Room", locationCell],
             ["Date", row => formatDate(row.absenceDate)], ["Reason", absenceReason], ["Recorded by", row => row.recordedBy],
             ["Actions", row => row.status === "ACTIVE"
@@ -251,24 +251,35 @@ async function absenceView(ctx) {
                 : pill("Withdrawn", "warn")]
         ], {
             title: "Absence records",
-            search: row => [row.fullName, row.studentNumber, row.buildingName, row.absenceDate, row.reason, row.withdrawalReason],
-            filters: [{label: "Filter by record status", all: "All records", options: Object.entries(statuses),
-                value: row => row.status, initial: "ACTIVE"}]
+            filters: [
+                {name: "status", label: "Filter by record status", initial: "active",
+                    options: [["active", "Active records"], ["withdrawn", "Withdrawn records"], ["all", "All records"]]},
+                ...(buildings.length > 1 ? [{name: "buildingId", label: "Filter by building", all: "All buildings",
+                    options: buildings.map(building => [building.id, building.name])}] : []),
+                {name: "from", label: "From date", type: "date"},
+                {name: "to", label: "To date", type: "date"}
+            ],
+            exportTo: query => ctx.download("/absences/export.csv?" + query)
         }));
 }
 
 async function historyView(ctx) {
-    const history = await ctx.api("/admin/housing/history");
     const types = {TRANSFER: "Room transfer", CHECKOUT: "Check-out"};
     return page("Housing history", "Review prior room assignments, transfers and check-outs. Times are shown in " + timeZone() + ".", null,
-        table(history, [
+        await pagedTable(query => ctx.api("/admin/housing/history?" + query), [
             ["Student", row => person(row.fullName, row.studentNumber)], ["Previous room", locationCell],
             ["Checked in", row => formatTimestamp(row.checkInAt)],
             ["Closed", row => formatTimestamp(row.checkOutAt)], ["Type", row => pill(types[row.departureType])],
             ["Reason", row => row.departureReason], ["Processed by", row => row.processedBy]
         ], {
-            title: "Housing history", search: row => [row.fullName, row.studentNumber, row.buildingName, row.departureReason],
-            filters: [{label: "Filter by event type", all: "All events", options: Object.entries(types), value: row => row.departureType}]
+            title: "Housing history",
+            filters: [
+                {name: "type", label: "Filter by event type", all: "All events",
+                    options: [["transfer", "Room transfer"], ["checkout", "Check-out"]]},
+                {name: "from", label: "From date", type: "date"},
+                {name: "to", label: "To date", type: "date"}
+            ],
+            exportTo: query => ctx.download("/admin/housing/history/export.csv?" + query)
         }));
 }
 

@@ -1,5 +1,6 @@
 import {expect, test} from "@playwright/test";
 import {randomUUID} from "node:crypto";
+import {readFile} from "node:fs/promises";
 
 async function signIn(page, account) {
     await page.getByRole("button", {name: "Use " + account}).click();
@@ -56,7 +57,7 @@ async function housingFixtures(page, studentCount) {
         studentNumbers.push(studentNumber);
     }
     const rooms = (await read(page, "/rooms")).filter(room => room.buildingId === building.id);
-    const roster = await read(page, "/admin/students");
+    const roster = (await read(page, "/admin/students?size=100&q=" + suffix)).items;
     const students = studentNumbers.map(number => roster.find(student => student.studentNumber === number));
     return {rooms, students};
 }
@@ -81,13 +82,14 @@ async function rejectForm(page, path, status, message) {
 
 async function housingState(page, student, rooms) {
     const [students, inventory, history] = await Promise.all([
-        read(page, "/admin/students"), read(page, "/rooms"), read(page, "/admin/housing/history")
+        read(page, "/admin/students?q=" + student.studentNumber), read(page, "/rooms"),
+        read(page, "/admin/housing/history?q=" + student.studentNumber)
     ]);
     const roomIds = new Set(rooms.map(room => room.id));
     return {
-        student: students.find(item => item.id === student.id),
+        student: students.items.find(item => item.id === student.id),
         rooms: inventory.filter(room => roomIds.has(room.id)),
-        history: history.filter(stay => stay.studentNumber === student.studentNumber)
+        history: history.items.filter(stay => stay.studentNumber === student.studentNumber)
     };
 }
 
@@ -103,6 +105,7 @@ test("administrator and building staff complete a residence workflow", async ({p
     await page.getByLabel("Full name").fill(studentName);
     await page.getByLabel("Gender", {exact: true}).selectOption("Female");
     await save(page);
+    await page.getByRole("searchbox", {name: "Search Students"}).fill(studentNumber);
 
     const student = page.getByRole("row").filter({hasText: studentNumber});
     await student.getByRole("button", {name: "Check in"}).click();
@@ -133,6 +136,7 @@ test("administrator and building staff complete a residence workflow", async ({p
     await page.getByRole("button", {name: "Sign out"}).click();
     await signIn(page, "administrator");
     await navigate(page, "Students");
+    await page.getByRole("searchbox", {name: "Search Students"}).fill(studentNumber);
     await student.getByRole("button", {name: "Transfer"}).click();
     await page.getByLabel("Destination room").selectOption({label: "Willow Hall · A01 (1 available)"});
     await save(page);
@@ -206,7 +210,7 @@ test("staff can neither see nor record an absence for another building", async (
     await page.getByRole("dialog").getByRole("button", {name: "Cancel"}).click();
     await page.getByRole("button", {name: "Sign out"}).click();
     await signIn(page, "administrator");
-    expect((await read(page, "/absences")).some(absence => absence.reason === reason)).toBe(false);
+    expect((await read(page, "/absences?size=100")).items.some(absence => absence.reason === reason)).toBe(false);
 });
 
 test("server validation displays a field error without adding an invalid student", async ({page}) => {
@@ -220,7 +224,7 @@ test("server validation displays a field error without adding an invalid student
     await page.getByLabel("Gender", {exact: true}).selectOption("Male");
 
     await rejectForm(page, "/admin/students", 400, "fullName must not be blank");
-    expect((await read(page, "/admin/students")).some(student => student.studentNumber === studentNumber)).toBe(false);
+    expect((await read(page, "/admin/students?q=" + studentNumber)).items.some(student => student.studentNumber === studentNumber)).toBe(false);
     await expect(page.getByLabel("Student number")).toHaveValue(studentNumber);
     await page.getByLabel("Full name").fill("Corrected Browser Resident");
     await save(page);
@@ -290,9 +294,37 @@ test("staff correct an absence record and then withdraw it", async ({page}) => {
     await expect(page.getByRole("dialog")).toBeHidden();
     await expect(corrected).toHaveCount(0);
 
-    await page.getByRole("combobox", {name: "Filter by record status"}).selectOption("WITHDRAWN");
+    await page.getByRole("combobox", {name: "Filter by record status"}).selectOption({label: "Withdrawn records"});
     await expect(corrected).toContainText("Withdrawn by Morgan Reed");
     await expect(corrected).toContainText("Entered by mistake");
-    const record = (await read(page, "/absences?status=withdrawn")).find(item => item.reason === reason + " (corrected)");
+    const record = (await read(page, "/absences?status=withdrawn&q=" + encodeURIComponent(reason))).items[0];
     expect(record.absenceDate).toBe(shift(today, -1));
+});
+
+test("student search pages server results and exports the matching rows", async ({page}) => {
+    await page.goto("/");
+    await signIn(page, "administrator");
+    const prefix = "PAGED-" + randomUUID().slice(0, 6).toUpperCase();
+    const number = index => prefix + "-" + String(index).padStart(2, "0");
+    for (let index = 1; index <= 23; index++) {
+        await post(page, "/admin/students", {studentNumber: number(index), fullName: "Paged Resident " + number(index), gender: "FEMALE"});
+    }
+    await navigate(page, "Students");
+    await page.getByRole("searchbox", {name: "Search Students"}).fill(prefix);
+    const students = page.getByRole("table", {name: "Students"});
+    await expect(page.getByText("1–20 of 23")).toBeVisible();
+    await expect(students.getByRole("row")).toHaveCount(21);
+    await page.getByRole("button", {name: "Next"}).click();
+    await expect(page.getByText("21–23 of 23")).toBeVisible();
+    await expect(students.getByText(number(23), {exact: true})).toBeVisible();
+
+    const download = page.waitForEvent("download");
+    await page.getByRole("button", {name: "Export CSV"}).click();
+    const file = await download;
+    expect(file.suggestedFilename()).toMatch(/^students-\d{4}-\d{2}-\d{2}\.csv$/);
+    const csv = await readFile(await file.path(), "utf8");
+    expect(csv.startsWith("\uFEFF")).toBe(true);
+    const lines = csv.slice(1).trimEnd().split("\r\n");
+    expect(lines[0]).toBe("Student number,Full name,Gender,Program,Phone,Email,Housing status,Building,Room");
+    expect(lines.slice(1).map(line => line.split(",")[0])).toEqual(Array.from({length: 23}, (_, index) => number(index + 1)));
 });

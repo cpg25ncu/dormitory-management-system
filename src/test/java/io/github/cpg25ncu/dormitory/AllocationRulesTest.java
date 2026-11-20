@@ -41,7 +41,7 @@ class AllocationRulesTest extends ApiIntegrationTest {
                 .isEqualTo("The selected building houses female students only.");
         assertThat(rejected(post(studentOperation(man, "transfer")), admin, Map.of("roomId", shared), 409))
                 .isEqualTo("The selected room has residents who are not recorded as male.");
-        assertThat(find(getJson("/api/admin/students", admin), "studentNumber", "RULES-M1").get("roomId").asLong())
+        assertThat(studentRecord(admin, "RULES-M1").get("roomId").asLong())
                 .isEqualTo(empty);
 
         JsonNode rooms = getJson("/api/rooms", admin);
@@ -58,7 +58,7 @@ class AllocationRulesTest extends ApiIntegrationTest {
         // Students created before version 2 of the schema have no recorded gender.
         jdbc.sql("INSERT INTO student (student_number, full_name, program) VALUES ('LEGACY-1', 'Legacy Resident', '')")
                 .update();
-        JsonNode legacy = find(getJson("/api/admin/students", admin), "studentNumber", "LEGACY-1");
+        JsonNode legacy = studentRecord(admin, "LEGACY-1");
         assertThat(legacy.get("gender").isNull()).isTrue();
         long id = legacy.get("id").asLong();
 
@@ -143,7 +143,7 @@ class AllocationRulesTest extends ApiIntegrationTest {
         write(post("/api/admin/students"), admin, unknownGender, 400);
 
         write(post("/api/admin/students"), admin, withContact("INPUT-5", "+86 138-0000-0000", "resident@example.org"), 201);
-        JsonNode created = find(getJson("/api/admin/students", admin), "studentNumber", "INPUT-5");
+        JsonNode created = studentRecord(admin, "INPUT-5");
         assertThat(created.get("phone").asString()).isEqualTo("+86 138-0000-0000");
         assertThat(created.get("email").asString()).isEqualTo("resident@example.org");
         assertThat(created.get("gender").asString()).isEqualTo("FEMALE");

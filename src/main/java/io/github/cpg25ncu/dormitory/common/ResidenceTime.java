@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -21,6 +22,7 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class ResidenceTime {
+    private static final DateTimeFormatter EXPORT_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private final Clock clock;
 
     ResidenceTime(Clock clock) {
@@ -48,6 +50,11 @@ public class ResidenceTime {
     /** The local calendar day of a UTC database timestamp. */
     public LocalDate dayOf(LocalDateTime utcTimestamp) {
         return utcTimestamp.toInstant(ZoneOffset.UTC).atZone(zone()).toLocalDate();
+    }
+
+    /** Formats an instant in the residence's time zone for exports, such as 2026-03-02 06:30. */
+    public String format(Instant instant) {
+        return instant == null ? null : EXPORT_FORMAT.format(instant.atZone(zone()));
     }
 
     /** Reads a UTC database timestamp as an instant. */

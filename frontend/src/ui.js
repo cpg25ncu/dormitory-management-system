@@ -88,6 +88,102 @@ export function table(rows, columns, options = {}) {
     return panel;
 }
 
+// Search text, filters and page of each server-side table, kept so a table keeps its place after an edit.
+const tableStates = new Map();
+
+export function forgetTables() { tableStates.clear(); }
+
+/**
+ * A table whose rows come from a paged API. `load(query)` resolves to {items, totalItems, totalPages}.
+ * Filters are selects ({name, label, options, all?, initial?}) or dates ({name, label, type: "date"}).
+ * The first page loads before the table is returned, so a failure surfaces like any other view error.
+ */
+export async function pagedTable(load, columns, options) {
+    const {title, filters = [], empty = "No records to display.", exportTo, pageSize = 20} = options;
+    const state = tableStates.get(title) ?? {q: "", page: 0, values: {}};
+    tableStates.set(title, state);
+    const body = element("tbody");
+    const scroll = element("div", {class: "table-scroll"}, element("table", {"aria-label": title},
+        element("thead", {}, element("tr", {}, columns.map(([heading]) => element("th", {scope: "col"}, heading)))),
+        body));
+    const noRows = element("p", {class: "empty"});
+    const searchBox = element("input", {type: "search", "aria-label": "Search " + title, placeholder: "Search " + title.toLowerCase()});
+    searchBox.value = state.q;
+    const controls = filters.map(filter => {
+        const control = filter.type === "date"
+            ? element("input", {type: "date", "aria-label": filter.label, title: filter.label})
+            : element("select", {"aria-label": filter.label}, filter.all && element("option", {value: ""}, filter.all),
+                filter.options.map(([value, label]) => element("option", {value}, label)));
+        control.value = state.values[filter.name] ?? filter.initial ?? "";
+        return {filter, control};
+    });
+    const exportButton = exportTo && button("Export CSV", () => exportTo(query(false)));
+    const status = element("span", {"aria-live": "polite"});
+    const previous = button("Previous", () => { state.page -= 1; refresh().catch(showError); });
+    const next = button("Next", () => { state.page += 1; refresh().catch(showError); });
+    const pager = element("div", {class: "table-footer"}, status, actionGroup(previous, next));
+    const panel = element("section", {class: "panel"},
+        element("div", {class: "panel-header"}, element("h2", {}, title),
+            element("div", {class: "table-controls"}, searchBox, controls.map(({control}) => control), exportButton)),
+        scroll, noRows, pager);
+
+    function query(paged) {
+        const params = new URLSearchParams();
+        if (searchBox.value.trim()) params.set("q", searchBox.value.trim());
+        for (const {filter, control} of controls) if (control.value) params.set(filter.name, control.value);
+        if (paged) {
+            params.set("page", state.page);
+            params.set("size", pageSize);
+        }
+        return params;
+    }
+
+    function showError(error) {
+        scroll.hidden = true;
+        pager.hidden = true;
+        noRows.hidden = false;
+        noRows.textContent = error.message;
+        panel.removeAttribute("aria-busy");
+    }
+
+    let version = 0;
+    async function refresh() {
+        const current = ++version;
+        panel.setAttribute("aria-busy", "true");
+        const result = await load(query(true));
+        // A slower response to an earlier search must not replace a newer one.
+        if (current !== version) return;
+        if (!result.items.length && result.totalItems > 0 && state.page > 0) {
+            state.page = result.totalPages - 1;
+            return refresh();
+        }
+        body.replaceChildren(...result.items.map(row => element("tr", {}, columns.map(([, render]) => element("td", {}, render(row))))));
+        const filtered = searchBox.value.trim() || controls.some(({filter, control}) => control.value !== (filter.initial ?? ""));
+        scroll.hidden = result.items.length === 0;
+        noRows.hidden = result.items.length > 0;
+        noRows.textContent = filtered ? "No records match your filters." : empty;
+        const start = state.page * pageSize;
+        pager.hidden = result.totalPages <= 1;
+        previous.disabled = state.page === 0;
+        next.disabled = state.page >= result.totalPages - 1;
+        status.textContent = (start + 1) + "–" + (start + result.items.length) + " of " + result.totalItems;
+        panel.removeAttribute("aria-busy");
+    }
+
+    function restart() {
+        state.q = searchBox.value;
+        for (const {filter, control} of controls) state.values[filter.name] = control.value;
+        state.page = 0;
+        refresh().catch(showError);
+    }
+
+    let typing;
+    searchBox.addEventListener("input", () => { clearTimeout(typing); typing = setTimeout(restart, 300); });
+    controls.forEach(({control}) => control.addEventListener("change", restart));
+    await refresh();
+    return panel;
+}
+
 export function field({ name, label, type = "text", value = "", options, required = true, maxLength,
                         minLength, min, max, autocomplete }) {
     const id = "form-field-" + name;

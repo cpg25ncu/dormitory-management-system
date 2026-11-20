@@ -5,16 +5,21 @@ import static io.github.cpg25ncu.dormitory.common.ApiErrors.invalid;
 import static io.github.cpg25ncu.dormitory.common.ApiErrors.notFound;
 
 import io.github.cpg25ncu.dormitory.account.AccountPrincipal;
+import io.github.cpg25ncu.dormitory.common.CsvDownload;
+import io.github.cpg25ncu.dormitory.common.Filters;
+import io.github.cpg25ncu.dormitory.common.Page;
 import io.github.cpg25ncu.dormitory.common.ResidenceTime;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.Consumer;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -28,6 +33,26 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class Absences {
+    private static final String MATCHING_ABSENCES = """
+            SELECT a.id, a.stay_id, a.absence_date, a.reason, s.student_number, s.full_name,
+                r.room_number, b.id AS building_id, b.name AS building_name, u.display_name AS recorded_by, a.created_at,
+                editor.display_name AS updated_by, a.updated_at,
+                withdrawer.display_name AS withdrawn_by, a.withdrawn_at, a.withdrawal_reason
+            FROM absence_record a JOIN stay st ON st.id = a.stay_id JOIN student s ON s.id = st.student_id
+            JOIN room r ON r.id = st.room_id JOIN building b ON b.id = r.building_id
+            JOIN app_user u ON u.id = a.recorded_by
+            LEFT JOIN app_user editor ON editor.id = a.updated_by
+            LEFT JOIN app_user withdrawer ON withdrawer.id = a.withdrawn_by
+            WHERE (:admin = TRUE OR b.manager_id = :account)
+                AND (:status = 'ALL' OR (:status = 'ACTIVE' AND a.withdrawn_at IS NULL)
+                    OR (:status = 'WITHDRAWN' AND a.withdrawn_at IS NOT NULL))
+                AND (:building IS NULL OR b.id = :building)
+                AND (:from IS NULL OR a.absence_date >= :from)
+                AND (:to IS NULL OR a.absence_date <= :to)
+                AND (:pattern IS NULL OR LOWER(s.full_name) LIKE :pattern ESCAPE '!'
+                    OR LOWER(s.student_number) LIKE :pattern ESCAPE '!' OR LOWER(a.reason) LIKE :pattern ESCAPE '!')
+            """;
+
     private final JdbcClient jdbc;
     private final ResidenceTime time;
 
@@ -36,31 +61,38 @@ public class Absences {
         this.time = time;
     }
 
-    public List<Absence> list(AccountPrincipal account, Status status) {
-        return jdbc.sql("""
-                SELECT a.id, a.stay_id, a.absence_date, a.reason, s.student_number, s.full_name,
-                    r.room_number, b.name AS building_name, u.display_name AS recorded_by, a.created_at,
-                    editor.display_name AS updated_by, a.updated_at,
-                    withdrawer.display_name AS withdrawn_by, a.withdrawn_at, a.withdrawal_reason
-                FROM absence_record a JOIN stay st ON st.id = a.stay_id JOIN student s ON s.id = st.student_id
-                JOIN room r ON r.id = st.room_id JOIN building b ON b.id = r.building_id
-                JOIN app_user u ON u.id = a.recorded_by
-                LEFT JOIN app_user editor ON editor.id = a.updated_by
-                LEFT JOIN app_user withdrawer ON withdrawer.id = a.withdrawn_by
-                WHERE (:admin = TRUE OR b.manager_id = :account)
-                    AND (:status = 'ALL' OR (:status = 'ACTIVE' AND a.withdrawn_at IS NULL)
-                        OR (:status = 'WITHDRAWN' AND a.withdrawn_at IS NOT NULL))
-                ORDER BY a.absence_date DESC, a.id DESC
-                """).param("admin", account.isAdmin()).param("account", account.id()).param("status", status.name())
+    public Page<Absence> search(AccountPrincipal account, Filter filter, Page.Request page) {
+        long total = bind(jdbc.sql("SELECT COUNT(*) FROM (" + MATCHING_ABSENCES + ") matches"), account, filter)
+                .query(Long.class).single();
+        return page.of(fetch(account, filter, page), total);
+    }
+
+    /** Visits every matching record, most recent first, reading a consistent snapshot in batches. */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public void export(AccountPrincipal account, Filter filter, Consumer<Absence> action) {
+        CsvDownload.forEachRow(page -> fetch(account, filter, page), action);
+    }
+
+    private List<Absence> fetch(AccountPrincipal account, Filter filter, Page.Request page) {
+        return bind(jdbc.sql(MATCHING_ABSENCES + " ORDER BY a.absence_date DESC, a.id DESC LIMIT :limit OFFSET :offset"),
+                account, filter).param("limit", page.size()).param("offset", page.offset())
                 .query((row, number) -> new Absence(row.getLong("id"), row.getLong("stay_id"),
                         row.getObject("absence_date", LocalDate.class), row.getString("reason"),
                         row.getString("student_number"), row.getString("full_name"), row.getString("room_number"),
-                        row.getString("building_name"), row.getString("recorded_by"), instant(row.getObject("created_at", LocalDateTime.class)),
+                        row.getLong("building_id"), row.getString("building_name"), row.getString("recorded_by"),
+                        instant(row.getObject("created_at", LocalDateTime.class)),
                         row.getString("updated_by"), instant(row.getObject("updated_at", LocalDateTime.class)),
                         row.getObject("withdrawn_at") == null ? "ACTIVE" : "WITHDRAWN",
                         row.getString("withdrawn_by"), instant(row.getObject("withdrawn_at", LocalDateTime.class)),
                         row.getString("withdrawal_reason")))
                 .list();
+    }
+
+    private static JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement, AccountPrincipal account, Filter filter) {
+        return statement.param("admin", account.isAdmin()).param("account", account.id())
+                .param("status", filter.status().name()).param("pattern", filter.pattern(), Types.VARCHAR)
+                .param("building", filter.buildingId(), Types.BIGINT)
+                .param("from", filter.from(), Types.DATE).param("to", filter.to(), Types.DATE);
     }
 
     /** Records an absence, or restores a withdrawn record for the same resident and day. */
@@ -175,10 +207,20 @@ public class Absences {
         }
     }
 
+    /** Optional absence filters. Records are active unless a status is given. */
+    public record Filter(String pattern, Status status, Long buildingId, LocalDate from, LocalDate to) {
+        public static Filter of(String q, String status, Long buildingId, LocalDate from, LocalDate to) {
+            Filters.ensureRange(from, to);
+            return new Filter(Filters.contains(q), status == null || status.isBlank() ? Status.ACTIVE : Status.parse(status),
+                    buildingId, from, to);
+        }
+    }
+
     private record Stay(long id, LocalDateTime checkInAt, LocalDateTime checkOutAt) {}
 
     public record Absence(long id, long stayId, LocalDate absenceDate, String reason, String studentNumber,
-                          String fullName, String roomNumber, String buildingName, String recordedBy, Instant recordedAt,
+                          String fullName, String roomNumber, long buildingId, String buildingName, String recordedBy,
+                          Instant recordedAt,
                           String updatedBy, Instant updatedAt, String status, String withdrawnBy, Instant withdrawnAt,
                           String withdrawalReason) {}
     public record NewAbsence(@Positive long stayId, @NotNull LocalDate absenceDate,
