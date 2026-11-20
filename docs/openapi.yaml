@@ -127,21 +127,21 @@ paths:
   /api/absences:
     get:
       operationId: listAbsences
-      summary: List visible absence records
+      summary: Search visible absence records, most recent first
       parameters:
-        - name: status
-          in: query
-          required: false
-          description: Which records to include. Withdrawn records stay available for review.
-          schema: { type: string, enum: [active, withdrawn, all], default: active }
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/AbsenceQuery'
+        - $ref: '#/components/parameters/AbsenceStatus'
+        - $ref: '#/components/parameters/BuildingId'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
       responses:
         '200':
-          description: Absences, most recent first
+          description: A page of absence records
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Absence' }
+              schema: { $ref: '#/components/schemas/AbsencePage' }
         '400': { $ref: '#/components/responses/Invalid' }
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
@@ -164,6 +164,27 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/absences/export.csv:
+    get:
+      operationId: exportAbsences
+      summary: Export visible absence records as CSV
+      description: >
+        Every record that matches the filters, without paging. Cells that start with = + - @, a tab or a carriage return get a leading apostrophe so spreadsheets do not run them as formulas. Times use the residence's time zone.
+      parameters:
+        - $ref: '#/components/parameters/AbsenceQuery'
+        - $ref: '#/components/parameters/AbsenceStatus'
+        - $ref: '#/components/parameters/BuildingId'
+        - $ref: '#/components/parameters/From'
+        - $ref: '#/components/parameters/To'
+      responses:
+        '200':
+          description: A CSV attachment with a UTF-8 byte order mark
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/absences/{id}:
     put:
       operationId: correctAbsence
@@ -301,15 +322,20 @@ paths:
   /api/admin/students:
     get:
       operationId: listStudents
-      summary: List student records and their current housing status
+      summary: Search student records and their housing status, ordered by name
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/StudentQuery'
+        - $ref: '#/components/parameters/HousingStatus'
+        - $ref: '#/components/parameters/GenderFilter'
       responses:
         '200':
-          description: Students
+          description: A page of students
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Student' }
+              schema: { $ref: '#/components/schemas/StudentPage' }
+        '400': { $ref: '#/components/responses/Invalid' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
@@ -324,6 +350,25 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /api/admin/students/export.csv:
+    get:
+      operationId: exportStudents
+      summary: Export student records as CSV
+      description: >
+        Every record that matches the filters, without paging. Cells that start with = + - @, a tab or a carriage return get a leading apostrophe so spreadsheets do not run them as formulas. Times use the residence's time zone.
+      parameters:
+        - $ref: '#/components/parameters/StudentQuery'
+        - $ref: '#/components/parameters/HousingStatus'
+        - $ref: '#/components/parameters/GenderFilter'
+      responses:
+        '200':
+          description: A CSV attachment with a UTF-8 byte order mark
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
   /api/admin/students/{id}:
     parameters:
       - $ref: '#/components/parameters/Id'
@@ -404,15 +449,41 @@ paths:
   /api/admin/housing/history:
     get:
       operationId: listHousingHistory
-      summary: List closed stays, including transfers and checkouts
+      summary: Search closed stays, including transfers and checkouts, most recent first
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+        - $ref: '#/components/parameters/HistoryQuery'
+        - $ref: '#/components/parameters/DepartureType'
+        - $ref: '#/components/parameters/DepartedFrom'
+        - $ref: '#/components/parameters/DepartedTo'
       responses:
         '200':
-          description: Closed stays
+          description: A page of closed stays
           content:
             application/json:
-              schema:
-                type: array
-                items: { $ref: '#/components/schemas/Departure' }
+              schema: { $ref: '#/components/schemas/DeparturePage' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/admin/housing/history/export.csv:
+    get:
+      operationId: exportHousingHistory
+      summary: Export closed stays as CSV
+      description: >
+        Every record that matches the filters, without paging. Cells that start with = + - @, a tab or a carriage return get a leading apostrophe so spreadsheets do not run them as formulas. Times use the residence's time zone.
+      parameters:
+        - $ref: '#/components/parameters/HistoryQuery'
+        - $ref: '#/components/parameters/DepartureType'
+        - $ref: '#/components/parameters/DepartedFrom'
+        - $ref: '#/components/parameters/DepartedTo'
+      responses:
+        '200':
+          description: A CSV attachment with a UTF-8 byte order mark
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+        '400': { $ref: '#/components/responses/Invalid' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
   /api/admin/staff:
@@ -515,6 +586,75 @@ components:
       in: path
       required: true
       schema: { $ref: '#/components/schemas/Id' }
+    Page:
+      name: page
+      in: query
+      description: Page number, starting at 0.
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+    StudentQuery:
+      name: q
+      in: query
+      description: >
+        Case-insensitive text contained in the name, student number, program, email, phone, building or room.
+        Wildcard characters such as % and _ match literally.
+      schema: { type: string, maxLength: 100 }
+    AbsenceQuery:
+      name: q
+      in: query
+      description: Case-insensitive text contained in the resident's name, student number or the reason.
+      schema: { type: string, maxLength: 100 }
+    HistoryQuery:
+      name: q
+      in: query
+      description: Case-insensitive text contained in the student's name, student number or the departure reason.
+      schema: { type: string, maxLength: 100 }
+    HousingStatus:
+      name: status
+      in: query
+      schema: { type: string, enum: [resident, unassigned, checked_out] }
+    GenderFilter:
+      name: gender
+      in: query
+      description: A recorded gender, or none for students without one.
+      schema: { type: string, enum: [female, male, none] }
+    AbsenceStatus:
+      name: status
+      in: query
+      description: Which records to include. Withdrawn records stay available for review.
+      schema: { type: string, enum: [active, withdrawn, all], default: active }
+    BuildingId:
+      name: buildingId
+      in: query
+      description: Limits results to one building. A building outside a staff account's assignment matches nothing.
+      schema: { $ref: '#/components/schemas/Id' }
+    From:
+      name: from
+      in: query
+      description: First absence date to include.
+      schema: { type: string, format: date }
+    To:
+      name: to
+      in: query
+      description: Last absence date to include. Must not be before from.
+      schema: { type: string, format: date }
+    DepartureType:
+      name: type
+      in: query
+      schema: { type: string, enum: [transfer, checkout] }
+    DepartedFrom:
+      name: from
+      in: query
+      description: First departure day to include, in the residence's time zone.
+      schema: { type: string, format: date }
+    DepartedTo:
+      name: to
+      in: query
+      description: Last departure day to include, in the residence's time zone. Must not be before from.
+      schema: { type: string, format: date }
   requestBodies:
     Building:
       required: true
@@ -560,6 +700,35 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
   schemas:
     Id: { type: integer, format: int64, minimum: 1 }
+    PageInfo:
+      type: object
+      required: [page, size, totalItems, totalPages]
+      properties:
+        page: { type: integer, minimum: 0 }
+        size: { type: integer, minimum: 1, maximum: 100 }
+        totalItems: { type: integer, format: int64, minimum: 0 }
+        totalPages: { type: integer, minimum: 0 }
+    StudentPage:
+      allOf:
+        - $ref: '#/components/schemas/PageInfo'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Student' } }
+    AbsencePage:
+      allOf:
+        - $ref: '#/components/schemas/PageInfo'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Absence' } }
+    DeparturePage:
+      allOf:
+        - $ref: '#/components/schemas/PageInfo'
+        - type: object
+          required: [items]
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Departure' } }
     Name: { type: string, minLength: 1, maxLength: 80 }
     Reason: { type: string, minLength: 1, maxLength: 240 }
     NewPassword:
@@ -700,7 +869,7 @@ components:
         buildingName: { type: string }
     Absence:
       type: object
-      required: [id, stayId, absenceDate, reason, studentNumber, fullName, roomNumber, buildingName, recordedBy, recordedAt,
+      required: [id, stayId, absenceDate, reason, studentNumber, fullName, roomNumber, buildingId, buildingName, recordedBy, recordedAt,
         updatedBy, updatedAt, status, withdrawnBy, withdrawnAt, withdrawalReason]
       properties:
         id: { $ref: '#/components/schemas/Id' }
@@ -710,6 +879,7 @@ components:
         studentNumber: { type: string }
         fullName: { type: string }
         roomNumber: { type: string }
+        buildingId: { $ref: '#/components/schemas/Id' }
         buildingName: { type: string }
         recordedBy: { type: string }
         recordedAt: { type: string, format: date-time }

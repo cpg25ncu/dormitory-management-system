@@ -1,4 +1,4 @@
-import {element, field, useTimeZone} from "./ui.js";
+import {element, field, forgetTables, useTimeZone} from "./ui.js";
 import {views} from "./views.js";
 import {browserDemo, request} from "./transport.js";
 
@@ -45,8 +45,26 @@ async function api(path, method = "GET", body) {
     return result;
 }
 
+async function download(path) {
+    const response = await request(new URL("api" + path, base),
+        {method: "GET", headers: new Headers({Accept: "text/csv, application/problem+json"})});
+    if (!response.ok) {
+        const problem = (response.headers.get("Content-Type") || "").includes("json") ? await response.json() : null;
+        notify(problem?.detail || "The export could not be created.");
+        return;
+    }
+    const name = /filename="([^"]+)"/.exec(response.headers.get("Content-Disposition") || "")?.[1] || "export.csv";
+    const link = element("a", {href: URL.createObjectURL(await response.blob()), download: name, hidden: true});
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+}
+
 async function loadSession() {
+    const previousUser = session?.user?.username;
     session = await api("/session");
+    if (session.user?.username !== previousUser) forgetTables();
     useTimeZone(session.timeZone);
     byId("loading").hidden = true;
     byId("demo-options").hidden = !session.demo;
@@ -77,7 +95,7 @@ async function renderRoute() {
     view.setAttribute("aria-busy", "true");
     view.replaceChildren(element("p", {class: "loading", role: "status"}, "Loading " + entry.label.toLowerCase() + "…"));
     try {
-        const content = await entry.render({api, isAdmin, openForm, notify});
+        const content = await entry.render({api, download, isAdmin, openForm, notify});
         if (version === routeVersion) view.replaceChildren(...content);
     } catch (error) {
         if (version !== routeVersion) return;

@@ -124,7 +124,19 @@ abstract class ApiIntegrationTest {
 
     long student(Login admin, String number, String gender) throws Exception {
         write(post("/api/admin/students"), admin, studentInput(number, gender), 201);
-        return find(getJson("/api/admin/students", admin), "studentNumber", number).get("id").asLong();
+        return studentRecord(admin, number).get("id").asLong();
+    }
+
+    /** Finds a student by number through the paged student search. */
+    JsonNode studentRecord(Login admin, String number) throws Exception {
+        return find(items("/api/admin/students?size=100&q=" + number, admin), "studentNumber", number);
+    }
+
+    /** Reads the items of a paged list. */
+    JsonNode items(String path, Login login) throws Exception {
+        JsonNode page = getJson(path, login);
+        assertThat(page.has("items") && page.has("totalItems")).as(path + " returns a page").isTrue();
+        return page.get("items");
     }
 
     long activeStay(Login login, String studentNumber) throws Exception {

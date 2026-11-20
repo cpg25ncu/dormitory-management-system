@@ -2,6 +2,9 @@ package io.github.cpg25ncu.dormitory.directory;
 
 import static io.github.cpg25ncu.dormitory.common.ApiErrors.notFound;
 
+import io.github.cpg25ncu.dormitory.common.CsvDownload;
+import io.github.cpg25ncu.dormitory.common.Filters;
+import io.github.cpg25ncu.dormitory.common.Page;
 import io.github.cpg25ncu.dormitory.housing.AllocationRules;
 import io.github.cpg25ncu.dormitory.housing.Gender;
 import jakarta.validation.constraints.Email;
@@ -9,7 +12,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.sql.Types;
 import java.util.List;
+import java.util.function.Consumer;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
@@ -17,6 +22,25 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class StudentDirectory {
+    // Derived columns such as the housing status can be filtered like stored ones.
+    private static final String MATCHING_STUDENTS = """
+            SELECT * FROM (
+                SELECT s.id, s.student_number, s.full_name, s.gender, s.program, s.phone, s.email, st.id AS stay_id,
+                    r.id AS room_id, r.room_number, b.name AS building_name,
+                    CASE WHEN st.id IS NOT NULL THEN 'RESIDENT'
+                         WHEN EXISTS (SELECT 1 FROM stay history WHERE history.student_id = s.id) THEN 'CHECKED_OUT'
+                         ELSE 'UNASSIGNED' END AS status
+                FROM student s LEFT JOIN stay st ON st.active_student_id = s.id
+                LEFT JOIN room r ON r.id = st.room_id LEFT JOIN building b ON b.id = r.building_id
+            ) students
+            WHERE (:status IS NULL OR status = :status)
+                AND (:gender IS NULL OR (:gender = 'NONE' AND gender IS NULL) OR gender = :gender)
+                AND (:pattern IS NULL OR LOWER(full_name) LIKE :pattern ESCAPE '!'
+                    OR LOWER(student_number) LIKE :pattern ESCAPE '!' OR LOWER(program) LIKE :pattern ESCAPE '!'
+                    OR LOWER(email) LIKE :pattern ESCAPE '!' OR LOWER(phone) LIKE :pattern ESCAPE '!'
+                    OR LOWER(building_name) LIKE :pattern ESCAPE '!' OR LOWER(room_number) LIKE :pattern ESCAPE '!')
+            """;
+
     private final JdbcClient jdbc;
     private final AllocationRules rules;
 
@@ -25,17 +49,27 @@ public class StudentDirectory {
         this.rules = rules;
     }
 
-    public List<Student> list() {
-        return jdbc.sql("""
-                SELECT s.id, s.student_number, s.full_name, s.gender, s.program, s.phone, s.email, st.id AS stay_id,
-                    r.id AS room_id, r.room_number, b.name AS building_name,
-                    CASE WHEN st.id IS NOT NULL THEN 'RESIDENT'
-                         WHEN EXISTS (SELECT 1 FROM stay history WHERE history.student_id = s.id) THEN 'CHECKED_OUT'
-                         ELSE 'UNASSIGNED' END AS status
-                FROM student s LEFT JOIN stay st ON st.active_student_id = s.id
-                LEFT JOIN room r ON r.id = st.room_id LEFT JOIN building b ON b.id = r.building_id
-                ORDER BY s.full_name, s.id
-                """).query(Student.class).list();
+    public Page<Student> search(Filter filter, Page.Request page) {
+        long total = bind(jdbc.sql("SELECT COUNT(*) FROM (" + MATCHING_STUDENTS + ") matches"), filter)
+                .query(Long.class).single();
+        return page.of(fetch(filter, page), total);
+    }
+
+    /** Visits every matching student in name order, reading a consistent snapshot in batches. */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
+    public void export(Filter filter, Consumer<Student> action) {
+        CsvDownload.forEachRow(page -> fetch(filter, page), action);
+    }
+
+    private List<Student> fetch(Filter filter, Page.Request page) {
+        return bind(jdbc.sql(MATCHING_STUDENTS + " ORDER BY full_name, id LIMIT :limit OFFSET :offset"), filter)
+                .param("limit", page.size()).param("offset", page.offset()).query(Student.class).list();
+    }
+
+    private static JdbcClient.StatementSpec bind(JdbcClient.StatementSpec statement, Filter filter) {
+        return statement.param("pattern", filter.pattern(), Types.VARCHAR)
+                .param("status", filter.status() == null ? null : filter.status().name(), Types.VARCHAR)
+                .param("gender", filter.gender() == null ? null : filter.gender().name(), Types.VARCHAR);
     }
 
     public void create(StudentInput input) {
@@ -66,6 +100,19 @@ public class StudentDirectory {
 
     private static String optional(String value, String blank) {
         return value == null || value.isBlank() ? blank : value.strip();
+    }
+
+    public enum HousingStatus { RESIDENT, UNASSIGNED, CHECKED_OUT }
+
+    /** Recorded gender, or NONE for students without one. */
+    public enum GenderFilter { FEMALE, MALE, NONE }
+
+    /** Optional student filters. {@code pattern} comes from {@link Filters#contains}. */
+    public record Filter(String pattern, HousingStatus status, GenderFilter gender) {
+        public static Filter of(String q, String status, String gender) {
+            return new Filter(Filters.contains(q), Filters.option(HousingStatus.class, status, "status"),
+                    Filters.option(GenderFilter.class, gender, "gender"));
+        }
     }
 
     public record Student(long id, String studentNumber, String fullName, Gender gender, String program,

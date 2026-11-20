@@ -31,7 +31,7 @@ async function call(path, {method = "GET", json, form, session} = {}) {
     const sessionCookie = response.headers.getSetCookie().find(value => value.startsWith("JSESSIONID="));
     if (sessionCookie) cookie = sessionCookie.split(";")[0];
     const type = response.headers.get("Content-Type") || "";
-    return {status: response.status, body: type.includes("json") ? await response.json() : null};
+    return {status: response.status, type, body: type.includes("json") ? await response.json() : await response.text()};
 }
 
 async function expectStatus(path, expected, options) {
@@ -70,21 +70,25 @@ async function housingWorkflow(session) {
 
     const studentNumber = `SMOKE-${suffix}`;
     await expectStatus("api/admin/students", 201, {method: "POST", json: {studentNumber, fullName: "Smoke Test Resident", gender: "FEMALE"}, session});
-    const student = (await expectStatus("api/admin/students", 200)).find(item => item.studentNumber === studentNumber);
+    const student = (await expectStatus(`api/admin/students?q=${studentNumber}`, 200)).items
+        .find(item => item.studentNumber === studentNumber);
     await expectStatus(`api/admin/students/${student.id}/check-in`, 201, {method: "POST", json: {roomId: room.id}, session});
 
     const resident = (await expectStatus("api/residents", 200)).find(item => item.studentId === student.id);
     const date = today(session.timeZone);
     await expectStatus("api/absences", 201, {method: "POST", json: {stayId: resident.stayId, absenceDate: date, reason: "Smoke test"}, session});
-    const absences = await expectStatus("api/absences", 200);
-    check(absences.some(item => item.studentNumber === studentNumber && item.absenceDate === date),
+    const absences = await expectStatus(`api/absences?q=${studentNumber}`, 200);
+    check(absences.items.some(item => item.studentNumber === studentNumber && item.absenceDate === date),
         "The recorded absence is missing from the absence log.");
+    const exported = await call(`api/absences/export.csv?q=${studentNumber}`);
+    check(exported.status === 200 && exported.type.startsWith("text/csv") && exported.body.includes(studentNumber),
+        "The absence export is missing the recorded absence.");
 
     await expectStatus(`api/admin/students/${student.id}/checkout`, 204, {method: "POST", json: {reason: "Smoke test complete"}, session});
-    const history = await expectStatus("api/admin/housing/history", 200);
-    check(history.some(item => item.studentNumber === studentNumber && item.departureType === "CHECKOUT"),
+    const history = await expectStatus(`api/admin/housing/history?q=${studentNumber}`, 200);
+    check(history.items.some(item => item.studentNumber === studentNumber && item.departureType === "CHECKOUT"),
         "The checkout is missing from housing history.");
-    console.log(`✓ Check-in, absence on ${date} (${session.timeZone}) and checkout`);
+    console.log(`✓ Check-in, absence on ${date} (${session.timeZone}), CSV export and checkout`);
 }
 
 async function main() {

@@ -103,6 +103,71 @@ function ensureCanAssign(student, room) {
         "The selected room has residents who are not recorded as " + student.gender.toLowerCase() + ".");
 }
 
+// Paged lists and exports follow the server's query parameters and validation messages.
+function option(params, name, allowed) {
+    const value = params.get(name)?.trim().toUpperCase();
+    if (!value) return null;
+    requireCondition(allowed.includes(value), 400, name + " must be one of: " + allowed.join(", ").toLowerCase() + ".");
+    return value;
+}
+
+function dateRange(params) {
+    const from = params.get("from") || null;
+    const to = params.get("to") || null;
+    requireCondition(!from || !to || from <= to, 400, "from must be on or before to.");
+    return {from, to};
+}
+
+function matches(params, ...values) {
+    const query = params.get("q")?.trim().toLowerCase();
+    return !query || values.some(value => value?.toLowerCase().includes(query));
+}
+
+function paged(rows, params) {
+    const page = Number(params.get("page") ?? 0);
+    const size = Number(params.get("size") ?? 20);
+    requireCondition(Number.isInteger(page) && page >= 0, 400, "page must be 0 or greater.");
+    requireCondition(Number.isInteger(size) && size >= 1 && size <= 100, 400, "size must be between 1 and 100.");
+    return {items: rows.slice(page * size, (page + 1) * size), page, size, totalItems: rows.length,
+        totalPages: Math.ceil(rows.length / size)};
+}
+
+function studentRows(params) {
+    const status = option(params, "status", ["RESIDENT", "UNASSIGNED", "CHECKED_OUT"]);
+    const gender = option(params, "gender", ["FEMALE", "MALE", "NONE"]);
+    return data.students.map(student => {
+        const stay = activeStay(student.id);
+        if (stay) return {...resident(stay), ...student, status: "RESIDENT"};
+        const pastStay = data.stays.some(item => item.studentId === student.id);
+        return {...student, stayId: null, roomId: null, roomNumber: null, buildingName: null,
+            status: pastStay ? "CHECKED_OUT" : "UNASSIGNED"};
+    }).filter(row => (!status || row.status === status)
+        && (!gender || (gender === "NONE" ? !row.gender : row.gender === gender))
+        && matches(params, row.fullName, row.studentNumber, row.program, row.email, row.phone, row.buildingName, row.roomNumber))
+        .sort((a, b) => a.fullName.localeCompare(b.fullName) || a.id - b.id);
+}
+
+function absenceRows(params, visibleIds) {
+    const status = option(params, "status", ["ACTIVE", "WITHDRAWN", "ALL"]) ?? "ACTIVE";
+    const buildingId = params.get("buildingId") ? Number(params.get("buildingId")) : null;
+    const {from, to} = dateRange(params);
+    return data.absences.map(absence => ({
+        ...resident(find(data.stays, absence.stayId)), ...absence, status: absence.withdrawnAt ? "WITHDRAWN" : "ACTIVE"
+    })).filter(row => visibleIds.has(row.buildingId) && (status === "ALL" || row.status === status)
+        && (!buildingId || row.buildingId === buildingId) && (!from || row.absenceDate >= from) && (!to || row.absenceDate <= to)
+        && matches(params, row.fullName, row.studentNumber, row.reason))
+        .sort((a, b) => b.absenceDate.localeCompare(a.absenceDate) || b.id - a.id);
+}
+
+function historyRows(params) {
+    const type = option(params, "type", ["TRANSFER", "CHECKOUT"]);
+    const {from, to} = dateRange(params);
+    return data.stays.filter(stay => stay.checkOutAt).map(stay => ({...resident(stay), ...stay}))
+        .filter(row => (!type || row.departureType === type) && (!from || localDay(row.checkOutAt) >= from)
+            && (!to || localDay(row.checkOutAt) <= to) && matches(params, row.fullName, row.studentNumber, row.departureReason))
+        .sort((a, b) => b.checkOutAt.localeCompare(a.checkOutAt) || b.id - a.id);
+}
+
 function list(route, user, params) {
     const visibleBuildings = data.buildings.filter(building => visibleBuilding(building, user));
     const visibleIds = new Set(visibleBuildings.map(building => building.id));
@@ -119,32 +184,53 @@ function list(route, user, params) {
         case "residents":
             return data.stays.filter(stay => !stay.checkOutAt).map(resident)
                 .filter(row => visibleIds.has(row.buildingId));
-        case "absences": {
-            const wanted = (params.get("status") ?? "active").toUpperCase();
-            requireCondition(["ACTIVE", "WITHDRAWN", "ALL"].includes(wanted), 400, "status must be active, withdrawn or all.");
-            return data.absences.map(absence => ({
-                ...resident(find(data.stays, absence.stayId)), ...absence,
-                status: absence.withdrawnAt ? "WITHDRAWN" : "ACTIVE"
-            })).filter(row => visibleIds.has(row.buildingId) && (wanted === "ALL" || row.status === wanted))
-                .sort((a, b) => b.absenceDate.localeCompare(a.absenceDate) || b.id - a.id);
-        }
+        case "absences":
+            return paged(absenceRows(params, visibleIds), params);
         case "admin/staff":
             return [staff];
         case "admin/students":
-            return data.students.map(student => {
-                const stay = activeStay(student.id);
-                if (stay) return {...resident(stay), ...student, status: "RESIDENT"};
-                const pastStay = data.stays.some(item => item.studentId === student.id);
-                return {...student, stayId: null, roomId: null, roomNumber: null, buildingName: null,
-                    status: pastStay ? "CHECKED_OUT" : "UNASSIGNED"};
-            }).sort((a, b) => a.fullName.localeCompare(b.fullName));
+            return paged(studentRows(params), params);
         case "admin/housing/history":
-            return data.stays.filter(stay => stay.checkOutAt)
-                .map(stay => ({...resident(stay), ...stay}))
-                .sort((a, b) => b.checkOutAt.localeCompare(a.checkOutAt) || b.id - a.id);
+            return paged(historyRows(params), params);
         default:
             throw new DemoError(404, "This view is unavailable.");
     }
+}
+
+function csvCell(value) {
+    if (value == null) return "";
+    let text = String(value);
+    // A leading apostrophe stops a spreadsheet from running the cell as a formula.
+    if (/^[=+\-@\t\r]/.test(text)) text = "'" + text;
+    return /[",\r\n]/.test(text) ? '"' + text.replaceAll('"', '""') + '"' : text;
+}
+
+const label = code => code && code.charAt(0) + code.slice(1).toLowerCase().replaceAll("_", " ");
+const stamp = iso => iso && localDay(iso) + " " + new Date(iso).toTimeString().slice(0, 5);
+
+function exportFile(route, user, params) {
+    const visibleIds = new Set(data.buildings.filter(building => visibleBuilding(building, user)).map(building => building.id));
+    const files = {
+        "admin/students/export.csv": () => ["students",
+            ["Student number", "Full name", "Gender", "Program", "Phone", "Email", "Housing status", "Building", "Room"],
+            studentRows(params).map(row => [row.studentNumber, row.fullName, label(row.gender), row.program, row.phone,
+                row.email, label(row.status), row.buildingName, row.roomNumber])],
+        "absences/export.csv": () => ["absences",
+            ["Date", "Student number", "Full name", "Building", "Room", "Reason", "Status", "Recorded by", "Recorded at",
+                "Corrected by", "Corrected at", "Withdrawn by", "Withdrawn at", "Withdrawal reason"],
+            absenceRows(params, visibleIds).map(row => [row.absenceDate, row.studentNumber, row.fullName, row.buildingName,
+                row.roomNumber, row.reason, label(row.status), row.recordedBy, stamp(row.recordedAt), row.updatedBy,
+                stamp(row.updatedAt), row.withdrawnBy, stamp(row.withdrawnAt), row.withdrawalReason])],
+        "admin/housing/history/export.csv": () => ["housing-history",
+            ["Student number", "Full name", "Building", "Room", "Checked in", "Closed", "Type", "Reason", "Processed by"],
+            historyRows(params).map(row => [row.studentNumber, row.fullName, row.buildingName, row.roomNumber,
+                stamp(row.checkInAt), stamp(row.checkOutAt), label(row.departureType), row.departureReason, row.processedBy])]
+    };
+    requireCondition(files[route], 404, "This view is unavailable.");
+    const [name, header, rows] = files[route]();
+    const body = "﻿" + [header, ...rows].map(row => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
+    return new Response(body, {headers: {"Content-Type": "text/csv;charset=UTF-8",
+        "Content-Disposition": 'attachment; filename="' + name + "-" + localDay() + '.csv"'}});
 }
 
 function housing(studentId, action, input, user) {
@@ -294,6 +380,7 @@ export function request(url, {method, body}) {
         } else {
             requireCondition(user, 401, "Choose a demo role.");
             requireCondition(!route.startsWith("admin/") || user.role === "ADMIN", 403, "This role cannot perform that action.");
+            if (method === "GET" && route.endsWith("/export.csv")) return exportFile(route, user, url.searchParams);
             if (method === "GET") return json(list(route, user, url.searchParams));
             const input = body ? JSON.parse(body) : null;
             const [, collection, recordId, action] = route.split("/");

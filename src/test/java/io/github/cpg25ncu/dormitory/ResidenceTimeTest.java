@@ -42,7 +42,7 @@ class ResidenceTimeTest extends ApiIntegrationTest {
         clock.fix(checkOut, ZoneId.of("America/New_York"));
         write(post(studentOperation(student, "checkout")), admin, Map.of("reason", "End of term"), 204);
 
-        JsonNode departure = find(getJson("/api/admin/housing/history", admin), "studentNumber", "TIMESTAMP-1");
+        JsonNode departure = find(items("/api/admin/housing/history?q=TIMESTAMP-1", admin), "studentNumber", "TIMESTAMP-1");
         assertThat(Instant.parse(departure.get("checkInAt").asString()))
                 .isEqualTo(Instant.parse("2026-04-10T16:15:30.123456Z"));
         assertThat(Instant.parse(departure.get("checkOutAt").asString())).isEqualTo(checkOut);

@@ -63,7 +63,7 @@ class AbsenceCorrectionsTest extends ApiIntegrationTest {
                 .isEqualTo("This absence record is already withdrawn.");
         assertThat(rejected(put("/api/absences/" + id), staff, correction(today, "Edit"), 409))
                 .isEqualTo("Withdrawn records cannot be corrected. Record the absence again instead.");
-        assertThat(getJson("/api/absences", staff).toString()).doesNotContain("Mistaken entry");
+        assertThat(items("/api/absences?size=100", staff).toString()).doesNotContain("Mistaken entry");
         JsonNode withdrawn = record(admin, id, "withdrawn");
         assertThat(withdrawn.get("status").asString()).isEqualTo("WITHDRAWN");
         assertThat(withdrawn.get("withdrawnBy").asString()).isEqualTo("Morgan Reed");
@@ -119,7 +119,7 @@ class AbsenceCorrectionsTest extends ApiIntegrationTest {
         } finally {
             threads.shutdownNow();
         }
-        JsonNode all = getJson("/api/absences?status=all", admin);
+        JsonNode all = items("/api/absences?size=100&status=all", admin);
         long records = 0;
         for (JsonNode row : all) if (row.get("studentNumber").asString().equals("RESTORE-1")) records++;
         assertThat(records).isOne();
@@ -127,11 +127,11 @@ class AbsenceCorrectionsTest extends ApiIntegrationTest {
     }
 
     private long absenceId(Login login, String studentNumber, String status) throws Exception {
-        return find(getJson("/api/absences?status=" + status, login), "studentNumber", studentNumber).get("id").asLong();
+        return find(items("/api/absences?size=100&status=" + status, login), "studentNumber", studentNumber).get("id").asLong();
     }
 
     private JsonNode record(Login login, long id, String status) throws Exception {
-        return find(getJson("/api/absences?status=" + status, login), "id", Long.toString(id));
+        return find(items("/api/absences?size=100&status=" + status, login), "id", Long.toString(id));
     }
 
     private static Map<String, Object> absence(long stay, String date, String reason) {

@@ -33,7 +33,7 @@ class ResidenceWorkflowsTest extends ApiIntegrationTest {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
                 .andExpect(jsonPath("$[0].name").value("Cedar Hall"));
         assertThat(getJson("/api/rooms", staff).size()).isEqualTo(3);
-        assertThat(getJson("/api/absences", staff).toString()).doesNotContain("Maple Hall");
+        assertThat(items("/api/absences?size=100", staff).toString()).doesNotContain("Maple Hall");
 
         long assignedStay = activeStay(staff, "DEMO-002");
         long otherStay = activeStay(admin, "DEMO-006");
@@ -41,7 +41,7 @@ class ResidenceWorkflowsTest extends ApiIntegrationTest {
         write(post("/api/absences"), staff, Map.of("stayId", otherStay, "absenceDate", today, "reason", "No access"), 404);
         write(post("/api/absences"), staff, Map.of("stayId", assignedStay, "absenceDate", today, "reason", "Approved leave"), 201);
         write(post("/api/absences"), staff, Map.of("stayId", assignedStay, "absenceDate", today, "reason", "Duplicate entry"), 409);
-        assertThat(getJson("/api/absences", admin).toString()).contains("Approved leave");
+        assertThat(items("/api/absences?size=100", admin).toString()).contains("Approved leave");
     }
 
     @Test
@@ -59,7 +59,7 @@ class ResidenceWorkflowsTest extends ApiIntegrationTest {
         write(post(studentOperation(student, "check-in")), admin, Map.of("roomId", destination), 409);
         write(post(studentOperation(other, "check-in")), admin, Map.of("roomId", destination), 201);
         write(post(studentOperation(student, "transfer")), admin, Map.of("roomId", destination), 409);
-        assertThat(find(getJson("/api/admin/students", admin), "studentNumber", "TRANSFER-1").get("roomId").asLong())
+        assertThat(studentRecord(admin, "TRANSFER-1").get("roomId").asLong())
                 .isEqualTo(originalRoom);
 
         write(post(studentOperation(other, "checkout")), admin, Map.of("reason", "Room change"), 204);
@@ -70,7 +70,7 @@ class ResidenceWorkflowsTest extends ApiIntegrationTest {
         write(post(studentOperation(student, "checkout")), admin, Map.of("reason", "Repeated checkout"), 409);
         write(delete("/api/admin/students/" + student), admin, null, 409);
 
-        JsonNode history = getJson("/api/admin/housing/history", admin);
+        JsonNode history = items("/api/admin/housing/history?size=100&q=TRANSFER-1", admin);
         assertThat(history.toString()).contains("TRANSFER", "CHECKOUT", "End of residence").doesNotContain("Repeated checkout");
         assertThat(occupied(admin, destination)).isZero();
     }
