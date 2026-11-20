@@ -117,10 +117,11 @@ public class BootstrapData implements ApplicationRunner {
 
     private void seedAbsence(String number, LocalDate date, String reason, long user) {
         jdbc.sql("""
-                INSERT INTO absence_record (stay_id, absence_date, reason, recorded_by)
-                SELECT st.id, :date, :reason, :user FROM stay st
+                INSERT INTO absence_record (stay_id, absence_date, reason, recorded_by, created_at)
+                SELECT st.id, :date, :reason, :user, :now FROM stay st
                 JOIN student s ON s.id = st.student_id WHERE s.student_number = :number
-                """).param("date", date).param("reason", reason).param("user", user).param("number", number).update();
+                """).param("date", date).param("reason", reason).param("user", user).param("number", number)
+                .param("now", time.now()).update();
     }
 
     /** A demo sign-in shown on the sign-in page. */

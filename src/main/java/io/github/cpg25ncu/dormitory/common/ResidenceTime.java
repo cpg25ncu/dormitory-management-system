@@ -45,6 +45,16 @@ public class ResidenceTime {
         return utc(day.atStartOfDay(zone()).toInstant());
     }
 
+    /** The local calendar day of a UTC database timestamp. */
+    public LocalDate dayOf(LocalDateTime utcTimestamp) {
+        return utcTimestamp.toInstant(ZoneOffset.UTC).atZone(zone()).toLocalDate();
+    }
+
+    /** Reads a UTC database timestamp as an instant. */
+    public static Instant instant(LocalDateTime utcTimestamp) {
+        return utcTimestamp == null ? null : utcTimestamp.toInstant(ZoneOffset.UTC);
+    }
+
     private static LocalDateTime utc(Instant instant) {
         // TIMESTAMP(6) columns keep microseconds.
         return LocalDateTime.ofInstant(instant.truncatedTo(ChronoUnit.MICROS), ZoneOffset.UTC);

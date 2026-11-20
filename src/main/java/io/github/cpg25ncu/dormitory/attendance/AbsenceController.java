@@ -17,11 +17,28 @@ public class AbsenceController {
     }
 
     @GetMapping
-    List<Absences.Absence> list(@AuthenticationPrincipal AccountPrincipal account) { return absences.list(account); }
+    List<Absences.Absence> list(@AuthenticationPrincipal AccountPrincipal account,
+                                @RequestParam(defaultValue = "active") String status) {
+        return absences.list(account, Absences.Status.parse(status));
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     void record(@Valid @RequestBody Absences.NewAbsence input, @AuthenticationPrincipal AccountPrincipal account) {
         absences.record(input, account);
+    }
+
+    @PutMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void correct(@PathVariable long id, @Valid @RequestBody Absences.Correction input,
+                 @AuthenticationPrincipal AccountPrincipal account) {
+        absences.correct(id, input, account);
+    }
+
+    @PostMapping("/{id}/withdraw")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void withdraw(@PathVariable long id, @Valid @RequestBody Absences.Withdrawal input,
+                  @AuthenticationPrincipal AccountPrincipal account) {
+        absences.withdraw(id, input, account);
     }
 }
