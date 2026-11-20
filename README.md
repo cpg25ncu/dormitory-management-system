@@ -20,7 +20,8 @@ Choose **Use administrator** to check Taylor Nguyen into Cedar Hall. Sign out an
 | Set mixed, female-only or male-only building policies | See each room’s allocation and available beds |
 | Assign staff to buildings and manage account access | Record resident absences and review their buildings’ absence history |
 | Check students in, transfer rooms and check students out | Review live room occupancy and availability |
-| Review all absence records and housing history | Change their own password |
+| Review all absence records and housing history | Correct or withdraw absence records, with the change recorded |
+| Correct or withdraw any absence record | Change their own password |
 
 ## Engineering Highlights
 
