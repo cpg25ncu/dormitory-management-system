@@ -1,0 +1,31 @@
+name: Feature request
+description: Suggest a change to residence workflows or operations.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: How should the system behave? Include any rules, such as who may do it and what is recorded.
+    validations:
+      required: true
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Who is affected?
+      multiple: true
+      options:
+        - System administrators
+        - Dormitory staff
+        - People who deploy and operate the system
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
