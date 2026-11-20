@@ -6,7 +6,7 @@ Use Java 17 or newer. From the repository root, the Maven Wrapper runs the backe
 
 ```bash
 sh ./mvnw -B clean verify
-java -jar target/dormitory-management-system-1.0.0.jar --spring.profiles.active=demo
+java -jar target/dormitory-management-system-1.1.0.jar --spring.profiles.active=demo
 ```
 
 On Windows, use `.\mvnw.cmd -B clean verify` in PowerShell. Open the demo at [127.0.0.1 on port 8080](http://127.0.0.1:8080). After changing frontend files, rebuild and restart to see the changes. The demo seeds fictional data in a fresh H2 database at startup.
@@ -27,9 +27,13 @@ npx playwright install chromium
 npm test
 ```
 
-Playwright starts the packaged Spring Boot JAR with its H2 demo profile on port `18080` and shuts it down after the run. The server runs in the `Pacific/Kiritimati` time zone (UTC+14), so for most of the day the residence's date differs from the UTC date and from the browser's date. Tests that depend on "today" fail if any code falls back to UTC. The suite covers the administrator and staff workflow from check-in through absence recording, transfer and checkout. It also checks form validation, full rooms and duplicate check-ins, out-of-scope staff requests, and preservation of current assignments, occupancy and history after rejected requests. Failed runs write traces to `frontend/test-results/`.
+Playwright finds the packaged JAR in `target/`, starts it with its H2 demo profile on port `18080`, and shuts it down after the run. The server runs in the `Pacific/Kiritimati` time zone (UTC+14), so for most of the day the residence's date differs from the UTC date and from the browser's date. Tests that depend on "today" fail if any code falls back to UTC. The suite covers the administrator and staff workflow from check-in through absence recording, transfer and checkout. It also checks form validation, full rooms and duplicate check-ins, out-of-scope staff requests, and preservation of current assignments, occupancy and history after rejected requests. Failed runs write traces to `frontend/test-results/`.
 
 Set `DORM_TEST_BROWSER_CHANNEL` to `chrome` or `msedge` before running `npm test` to use a locally installed browser.
+
+### README screenshots
+
+`npm run screenshots` in `frontend/` starts the packaged application on port `18081` and captures the images in [docs/media](media/) at 1440×960 with fictional demo records. Run it after interface changes so the README matches the application.
 
 ## Standalone browser demo
 
@@ -74,5 +78,6 @@ A unit test covers CSV quoting and formula neutralization. The suite replaces th
 | Docker Compose deployment | The image builds from source, both containers pass their health checks, and the [smoke test](deployment.md#health-checks-and-verification) signs in and runs check-in, absence and checkout against a fresh MySQL volume in a non-UTC time zone |
 | Publish browser demo and API reference | Builds the standalone demo and the Redoc API reference and deploys them to GitHub Pages |
 | CodeQL | Security analysis of Java, JavaScript and GitHub Actions workflows |
+| Release | On a `v*.*.*` tag, it checks the tag against the project version and runs the full build. It then publishes the container image to GHCR and creates the GitHub release with the JAR, checksums and changelog section |
 
 See the [build workflow](../.github/workflows/ci.yml), [demo workflow](../.github/workflows/demo.yml) and [deployment guide](deployment.md).
